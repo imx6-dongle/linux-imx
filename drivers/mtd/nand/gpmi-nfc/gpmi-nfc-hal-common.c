@@ -214,6 +214,7 @@ int gpmi_nfc_set_geometry(struct gpmi_nfc_data *this)
 			geometry->ecc_strength = 8;
 			break;
 		case 218:
+		case 224:
 			geometry->ecc_strength = 16;
 			break;
 		}
