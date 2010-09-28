@@ -187,8 +187,6 @@
 
 static struct mxs_saif mxs_saif_en;
 
-static int saif_active[2] = { 0, 0 };
-
 struct mxs_pcm_dma_params mxs_saif_0 = {
 	.name = "mxs-saif-0",
 	.dma_ch	= MXS_DMA_CHANNEL_AHB_APBX_SAIF0,
@@ -395,12 +393,6 @@ static int mxs_saif_startup(struct snd_pcm_substream *substream,
 	if (cpu_dai->playback.active && cpu_dai->capture.active)
 		return 0;
 
-	if (saif_select->saif_en == SAIF0)
-		if (saif_active[SAIF0_PORT]++)
-			return 0;
-	if (saif_select->saif_en == SAIF1)
-		if (saif_active[SAIF1_PORT]++)
-			return 0;
 	SAIF_DUMP();
 	return 0;
 }
@@ -414,8 +406,9 @@ static int mxs_saif_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_soc_dai *cpu_dai)
 {
 	u32 scr, stat;
-	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
-	if (saif_select->saif_en == SAIF0) {
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct mxs_runtime_data *prtd = runtime->private_data;
+	if (prtd->saif == SAIF0) {
 		scr = __raw_readl(SAIF0_CTRL);
 		stat = __raw_readl(SAIF0_STAT);
 	} else {
@@ -448,7 +441,7 @@ static int mxs_saif_hw_params(struct snd_pcm_substream *substream,
 		scr |= BM_SAIF_CTRL_READ_MODE;
 	}
 
-	if (saif_select->saif_en == SAIF0)
+	if (prtd->saif == SAIF0)
 		__raw_writel(scr, SAIF0_CTRL);
 	else
 		__raw_writel(scr, SAIF1_CTRL);
@@ -458,8 +451,10 @@ static int mxs_saif_hw_params(struct snd_pcm_substream *substream,
 static int mxs_saif_prepare(struct snd_pcm_substream *substream,
 			   struct snd_soc_dai *cpu_dai)
 {
-	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
-	if (saif_select->saif_en == SAIF0)
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct mxs_runtime_data *prtd = runtime->private_data;
+
+	if (prtd->saif == SAIF0)
 		__raw_writel(BM_SAIF_CTRL_CLKGATE, SAIF0_CTRL_CLR);
 	else
 		__raw_writel(BM_SAIF_CTRL_CLKGATE, SAIF1_CTRL_CLR);
@@ -471,13 +466,14 @@ static int mxs_saif_trigger(struct snd_pcm_substream *substream, int cmd,
 				struct snd_soc_dai *cpu_dai)
 {
 	void __iomem *reg;
-	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct mxs_runtime_data *prtd = runtime->private_data;
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 
-		if (saif_select->saif_en == SAIF0)
+		if (prtd->saif == SAIF0)
 			reg = (void __iomem *)SAIF0_DATA;
 		else
 			reg = (void __iomem *)SAIF1_DATA;
@@ -505,19 +501,9 @@ static int mxs_saif_trigger(struct snd_pcm_substream *substream, int cmd,
 static void mxs_saif_shutdown(struct snd_pcm_substream *substream,
 			     struct snd_soc_dai *cpu_dai)
 {
-	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
 	/* shutdown SAIF if neither Tx or Rx is active */
 	if (cpu_dai->playback.active || cpu_dai->capture.active)
 		return;
-
-	if (saif_select->saif_en == SAIF0) {
-		if (--saif_active[SAIF0_PORT] > 1)
-			return;
-	}
-	if (saif_select->saif_en == SAIF1) {
-		if (--saif_active[SAIF1_PORT])
-			return;
-	}
 }
 
 #ifdef CONFIG_PM

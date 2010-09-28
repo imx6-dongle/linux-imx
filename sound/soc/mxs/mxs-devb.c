@@ -57,12 +57,15 @@ static int mxs_evk_audio_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai_link *machine = rtd->dai;
 	struct snd_soc_dai *cpu_dai = machine->cpu_dai;
 	struct snd_soc_dai *codec_dai = machine->codec_dai;
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct mxs_runtime_data *prtd = runtime->private_data;
+	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
 	struct mxs_evk_priv *priv = &card_priv;
 	unsigned int rate = params_rate(params);
 	int ret = 0;
 
 	u32 dai_format;
-
+	saif_select->saif_en = prtd->saif;
 	/* only need to do this once as capture and playback are sync */
 	if (priv->hw)
 		return 0;
@@ -103,15 +106,17 @@ static int mxs_evk_startup(struct snd_pcm_substream *substream)
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_dai_link *machine = rtd->dai;
 	struct snd_soc_dai *cpu_dai = machine->cpu_dai;
+	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct mxs_runtime_data *prtd = runtime->private_data;
 	struct mxs_saif *saif_select = (struct mxs_saif *)cpu_dai->private_data;
 
 	if (((saif_select->stream_mapping == PLAYBACK_SAIF0_CAPTURE_SAIF1) && \
 		(substream->stream == SNDRV_PCM_STREAM_PLAYBACK)) || \
 		((saif_select->stream_mapping == PLAYBACK_SAIF1_CAPTURE_SAIF0) \
 		&& (substream->stream == SNDRV_PCM_STREAM_CAPTURE)))
-		saif_select->saif_en = 0;
+		prtd->saif = SAIF0;
 	else
-		saif_select->saif_en = 1;
+		prtd->saif = SAIF1;
 	return 0;
 }
 

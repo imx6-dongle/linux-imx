@@ -29,6 +29,7 @@ struct mxs_runtime_data {
 	u32 dma_ch;
 	u32 dma_period;
 	u32 dma_totsize;
+	int saif;
 	unsigned long appl_ptr_bytes;
 	int format;
 	struct mxs_pcm_dma_params *params;

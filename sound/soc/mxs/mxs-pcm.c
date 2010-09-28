@@ -115,7 +115,6 @@ static int mxs_pcm_prepare(struct snd_pcm_substream *substream)
 	struct mxs_runtime_data *prtd = runtime->private_data;
 	dma_addr_t dma_buffer_phys;
 	int periods_num, playback, i;
-
 	playback = substream->stream == SNDRV_PCM_STREAM_PLAYBACK ? 1 : 0;
 	periods_num = prtd->dma_totsize / prtd->dma_period;
 
