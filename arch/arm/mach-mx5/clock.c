@@ -4988,7 +4988,6 @@ int __init mx53_clocks_init(unsigned long ckil, unsigned long osc, unsigned long
 	clk_disable(&ssi_ext1_clk);
 	clk_set_parent(&ssi_ext1_clk, &pll2_sw_clk);
 	clk_set_rate(&ssi_ext1_clk, 24000000);
-	clk_enable(&ssi_ext1_clk);
 	clk_set_parent(&ssi_ext2_clk, &ssi2_clk[0]);
 
 	/* move usb_phy_clk to 24MHz */
