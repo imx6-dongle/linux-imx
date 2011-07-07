@@ -47,8 +47,17 @@
 
 #define MXS_AUART_MAJOR	242
 #define MXS_AUART_RX_THRESHOLD 16
+#define MXS_NUM_RX_DESCS              4
+#define MXS_NUM_DESCS                   (MXS_NUM_RX_DESCS + 1)
 
 static struct uart_driver auart_driver;
+
+struct mxs_rx_timeout_data {
+	int rx_dma;
+	u32 uart_reg_data;
+	u32 uart_rxbyte_invalid;
+	unsigned int buf_addr;
+};
 
 struct mxs_auart_port {
 	struct uart_port port;
@@ -69,6 +78,9 @@ struct mxs_auart_port {
 	struct list_head free;
 	struct mxs_dma_desc *tx;
 	struct tasklet_struct rx_task;
+	struct mxs_rx_timeout_data rx_timeout_elems[MXS_NUM_RX_DESCS];
+	int rx_timeout_chain_head;
+	int rx_timeout_chain_tail;
 };
 
 static void mxs_auart_stop_tx(struct uart_port *u);
@@ -188,6 +200,9 @@ static void dma_rx_do_tasklet(unsigned long arg)
 	int flag;
 	LIST_HEAD(list);
 	struct mxs_dma_desc *pdesc;
+	unsigned int uart_rxbyte_stat, uart_rx_data;
+	struct mxs_rx_timeout_data *elem;
+	int head;
 
 	mxs_dma_cooked(s->dma_rx_chan, &list);
 	stat = __raw_readl(s->port.membase + HW_UARTAPP_STAT);
@@ -215,10 +230,35 @@ static void dma_rx_do_tasklet(unsigned long arg)
 	list_for_each_safe(p, q, &list) {
 		list_del(p);
 		pdesc = list_entry(p, struct mxs_dma_desc, node);
-		count = stat & BM_UARTAPP_STAT_RXCOUNT;
-		tty_insert_flip_string(tty, pdesc->buffer, count);
+		head = s->rx_timeout_chain_head;
+		elem = &s->rx_timeout_elems[head];
+
+		if ((head != s->rx_timeout_chain_tail) &&
+		    (pdesc->cmd.address == elem->buf_addr)) {
+			count = elem->rx_dma;
+
+			/* We have data in the temporary buffer. */
+			uart_rxbyte_stat = elem->uart_rxbyte_invalid;
+			uart_rx_data = elem->uart_reg_data;
+			if (uart_rxbyte_stat) {
+				*((u32 *)((u8 *)(pdesc->buffer) + count))
+					= uart_rx_data;
+				while (!(uart_rxbyte_stat & 1)) {
+					uart_rxbyte_stat >>= 1;
+					count++;
+				}
+			}
+
+			tty_insert_flip_string(tty, pdesc->buffer, count);
+			if (++s->rx_timeout_chain_head >= MXS_NUM_RX_DESCS)
+				s->rx_timeout_chain_head = 0;
+		} else {
+			count = s->dma_rx_buffer_size;
+			tty_insert_flip_string(tty, pdesc->buffer, count);
+		}
 		if (flag != TTY_NORMAL)
 			tty_insert_flip_char(tty, 0, flag);
+
 		list_add(p, &s->free);
 	}
 	mxs_auart_submit_rx(s);
@@ -267,7 +307,7 @@ static int mxs_auart_dma_init(struct mxs_auart_port *s)
 	s->tx = NULL;
 
 
-	for (i = 0; i < 5; i++) {
+	for (i = 0; i < MXS_NUM_DESCS; i++) {
 		pdesc = mxs_dma_alloc_desc();
 		if (pdesc == NULL || IS_ERR(pdesc))
 			goto fail_alloc_desc;
@@ -302,6 +342,8 @@ static int mxs_auart_dma_init(struct mxs_auart_port *s)
 
 	/* Initialize RX tasklet */
 	tasklet_init(&s->rx_task, dma_rx_do_tasklet, (unsigned long)s);
+	/* Initialize RX timeout elements */
+	s->rx_timeout_chain_head = s->rx_timeout_chain_tail = 0;
 
 	return 0;
 fail_alloc_desc:
@@ -382,8 +424,7 @@ static void mxs_auart_submit_rx(struct mxs_auart_port *s)
 	struct list_head *p, *n;
 	struct mxs_dma_desc *pdesc;
 
-	pio_value = BM_UARTAPP_CTRL0_RXTO_ENABLE |
-		     BF_UARTAPP_CTRL0_RXTIMEOUT(0x80) |
+	pio_value = BF_UARTAPP_CTRL0_RXTIMEOUT(0x80) |
 		     BF_UARTAPP_CTRL0_XFER_COUNT(s->dma_rx_buffer_size);
 
 	list_for_each_safe(p, n, &s->free) {
@@ -583,16 +624,46 @@ static irqreturn_t mxs_auart_irq_handle(int irq, void *context)
 {
 	u32 istatus, istat;
 	struct mxs_auart_port *s = context;
+	static struct mxs_dma_info info;
+	struct mxs_rx_timeout_data *elem =
+			&s->rx_timeout_elems[s->rx_timeout_chain_tail];
 	u32 stat = __raw_readl(s->port.membase + HW_UARTAPP_STAT);
 
 	istatus = istat = __raw_readl(s->port.membase + HW_UARTAPP_INTR);
 
-	if (istat & BM_UARTAPP_INTR_CTSMIS) {
-		uart_handle_cts_change(&s->port, stat & BM_UARTAPP_STAT_CTS);
-		__raw_writel(BM_UARTAPP_INTR_CTSMIS,
-				s->port.membase + HW_UARTAPP_INTR_CLR);
-		istat &= ~BM_UARTAPP_INTR_CTSMIS;
+	/* Interested in only the Receive Timeout in DMA mode */
+	if (s->flags & MXS_AUART_PORT_DMA_MODE) {
+		if (istat & BM_UARTAPP_INTR_RTIS) {
+			/* how much data in the DMA buffer. */
+			mxs_dma_get_info(s->dma_rx_chan, &info);
+			elem->rx_dma = s->dma_rx_buffer_size
+					- ((info.debug2 >> 16) & 0xffff);
+			/* Store phys addr of DMA buf to match with timeout */
+			elem->buf_addr = info.buf_addr
+					- (elem->rx_dma & ~(0xf));
+
+			if ((stat & BM_UARTAPP_STAT_RXFE) == 0) {
+				elem->uart_reg_data =
+				__raw_readl(s->port.membase + HW_UARTAPP_DATA);
+				/* update stat */
+				elem->uart_rxbyte_invalid =
+				(__raw_readl(s->port.membase + HW_UARTAPP_STAT)
+				 >> BP_UARTAPP_STAT_RXBYTE_INVALID) & 0xf;
+			}
+
+			if (++s->rx_timeout_chain_tail >=  MXS_NUM_RX_DESCS)
+				s->rx_timeout_chain_tail = 0;
+
+			/* change the rx source to flush out DMA FIFO. */
+			__raw_writel(BM_UARTAPP_CTRL0_RX_SOURCE,
+				     s->port.membase + HW_UARTAPP_CTRL0_SET);
+			/* clear the Timeout interrupt bit */
+			__raw_writel(istatus & BM_UARTAPP_INTR_RTIS,
+				     s->port.membase + HW_UARTAPP_INTR_CLR);
+		}
+		return IRQ_HANDLED;
 	}
+
 	if (istat & (BM_UARTAPP_INTR_RTIS | BM_UARTAPP_INTR_RXIS)) {
 		mxs_auart_rx_chars(s);
 		istat &= ~(BM_UARTAPP_INTR_RTIS | BM_UARTAPP_INTR_RXIS);
@@ -714,8 +785,9 @@ static int mxs_auart_startup(struct uart_port *u)
 		__raw_writel(BM_UARTAPP_CTRL2_TXDMAE | BM_UARTAPP_CTRL2_RXDMAE
 			      | BM_UARTAPP_CTRL2_DMAONERR,
 			     s->port.membase + HW_UARTAPP_CTRL2_SET);
-		/* clear any pending interrupts */
-		__raw_writel(0, s->port.membase + HW_UARTAPP_INTR);
+
+		__raw_writel(BM_UARTAPP_INTR_RTIEN,
+			     s->port.membase + HW_UARTAPP_INTR);
 
 		/* reset all dma channels */
 		mxs_dma_reset(s->dma_tx_chan);
@@ -723,9 +795,6 @@ static int mxs_auart_startup(struct uart_port *u)
 	} else
 		__raw_writel(BM_UARTAPP_INTR_RXIEN | BM_UARTAPP_INTR_RTIEN,
 			     s->port.membase + HW_UARTAPP_INTR);
-
-	__raw_writel(BM_UARTAPP_INTR_CTSMIEN,
-		     s->port.membase + HW_UARTAPP_INTR_SET);
 
 	/*
 	 * Enable fifo so all four bytes of a DMA word are written to
@@ -749,8 +818,7 @@ static void mxs_auart_shutdown(struct uart_port *u)
 	if (s->flags & MXS_AUART_PORT_DMA_MODE)
 		mxs_auart_dma_exit(s);
 	else
-		__raw_writel(BM_UARTAPP_INTR_RXIEN | BM_UARTAPP_INTR_RTIEN |
-				BM_UARTAPP_INTR_CTSMIEN,
+		__raw_writel(BM_UARTAPP_INTR_RXIEN | BM_UARTAPP_INTR_RTIEN,
 			     s->port.membase + HW_UARTAPP_INTR_CLR);
 	mxs_auart_free_irqs(s);
 }
