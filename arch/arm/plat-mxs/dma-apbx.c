@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2009-2011 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -102,6 +102,8 @@ static void mxs_dma_apbx_info(struct mxs_dma_device *pdev,
 	reg = __raw_readl(pdev->base + HW_APBX_CHn_CMD(chan));
 	info->xfer_count = (reg & BM_APBX_CHn_CMD_XFER_COUNT) >> \
 		BP_APBX_CHn_CMD_XFER_COUNT;
+	reg = __raw_readl(pdev->base + HW_APBX_CHn_DEBUG2(chan));
+	info->debug2 = reg;
 }
 
 static int

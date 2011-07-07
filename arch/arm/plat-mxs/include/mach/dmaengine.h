@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2010 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2009-2011 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -107,6 +107,7 @@ struct mxs_dma_info {
 #define MXS_DMA_INFO_ERR_STAT  0x00010000
 	unsigned int buf_addr;
 	unsigned int xfer_count;
+	unsigned int debug2;
 };
 
 /**
