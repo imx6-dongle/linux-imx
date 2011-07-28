@@ -239,49 +239,6 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 {
 }
 
-static void __init fixup_android_board(struct machine_desc *desc, struct tag *tags,
-				       char **cmdline, struct meminfo *mi)
-{
-	char *str;
-	struct tag *t;
-	struct tag *mem_tag = 0;
-	int total_mem = SZ_2G;
-	int left_mem = 0, avali_mem = 0;
-	int pmem_gpu_size = android_pmem_gpu_data.size;
-	int pmem_adsp_size = android_pmem_data.size;
-
-	for_each_tag(t, tags) {
-		if (t->hdr.tag == ATAG_CMDLINE) {
-			str = t->u.cmdline.cmdline;
-			str = strstr(str, "mem=");
-			if (str != NULL) {
-				str += 4;
-				avali_mem = memparse(str, &str);
-			}
-			break;
-		}
-	}
-
-	/* get total memory from TAGS */
-	for_each_tag(mem_tag, tags) {
-		if (mem_tag->hdr.tag == ATAG_MEM) {
-			total_mem = mem_tag->u.mem.size;
-			left_mem = total_mem - pmem_gpu_size - pmem_adsp_size;
-			break;
-		}
-	}
-
-	if (avali_mem > 0 && avali_mem < left_mem)
-		left_mem = avali_mem;
-
-	if (mem_tag) {
-		android_pmem_data.start = mem_tag->u.mem.start
-			+ left_mem + pmem_gpu_size;
-		android_pmem_gpu_data.start = mem_tag->u.mem.start + left_mem;
-		mem_tag->u.mem.size = left_mem;
-	}
-}
-
 static struct fec_platform_data fec_data __initdata = {
 	.phy = PHY_INTERFACE_MODE_RGMII,
 };
@@ -762,6 +719,49 @@ static void __init mx6q_reserve(void)
 		memblock_free(phys, imx6q_gc2000_pdata.reserved_mem_size);
 		memblock_remove(phys, imx6q_gc2000_pdata.reserved_mem_size);
 		imx6q_gc2000_pdata.reserved_mem_base = phys;
+	}
+}
+
+static void __init fixup_android_board(struct machine_desc *desc, struct tag *tags,
+				       char **cmdline, struct meminfo *mi)
+{
+	char *str;
+	struct tag *t;
+	struct tag *mem_tag = 0;
+	int total_mem = SZ_2G;
+	int left_mem = 0, avali_mem = 0;
+	int pmem_gpu_size = android_pmem_gpu_data.size;
+	int pmem_adsp_size = android_pmem_data.size;
+
+	for_each_tag(t, tags) {
+		if (t->hdr.tag == ATAG_CMDLINE) {
+			str = t->u.cmdline.cmdline;
+			str = strstr(str, "mem=");
+			if (str != NULL) {
+				str += 4;
+				avali_mem = memparse(str, &str);
+			}
+			break;
+		}
+	}
+
+	/* get total memory from TAGS */
+	for_each_tag(mem_tag, tags) {
+		if (mem_tag->hdr.tag == ATAG_MEM) {
+			total_mem = mem_tag->u.mem.size;
+			left_mem = total_mem - pmem_gpu_size - pmem_adsp_size;
+			break;
+		}
+	}
+
+	if (avali_mem > 0 && avali_mem < left_mem)
+		left_mem = avali_mem;
+
+	if (mem_tag) {
+		android_pmem_data.start = mem_tag->u.mem.start
+			+ left_mem + pmem_gpu_size;
+		android_pmem_gpu_data.start = mem_tag->u.mem.start + left_mem;
+		mem_tag->u.mem.size = left_mem;
 	}
 }
 
