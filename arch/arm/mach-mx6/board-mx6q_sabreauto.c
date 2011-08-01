@@ -59,6 +59,8 @@
 #include <mach/viv_gpu.h>
 #include <mach/ahci_sata.h>
 #include <mach/ipu-v3.h>
+#include <mach/mxc_hdmi.h>
+#include <mach/mxc_asrc.h>
 #include <linux/android_pmem.h>
 #include <linux/usb/android_composite.h>
 #include <linux/gpio.h>
@@ -159,6 +161,25 @@ static iomux_v3_cfg_t mx6q_sabreauto_pads[] = {
 	MX6Q_PAD_EIM_D17__ECSPI1_MISO,
 	MX6Q_PAD_EIM_D18__ECSPI1_MOSI,
 
+	/* ESAI */
+	MX6Q_PAD_ENET_RXD0__ESAI1_HCKT,
+	/* MX6Q_PAD_ENET_RX_ER__ESAI1_HCKR,
+	MX6Q_PAD_ENET_MDIO__ESAI1_SCKR,
+	MX6Q_PAD_ENET_REF_CLK__ESAI1_FSR, */
+	MX6Q_PAD_ENET_CRS_DV__ESAI1_SCKT,
+	MX6Q_PAD_ENET_RXD1__ESAI1_FST,
+	/* MX6Q_PAD_ENET_TX_EN__ESAI1_TX3_RX2,
+	MX6Q_PAD_ENET_TXD1__ESAI1_TX2_RX3,
+	MX6Q_PAD_ENET_TXD0__ESAI1_TX4_RX1,
+	MX6Q_PAD_ENET_MDC__ESAI1_TX5_RX0, */
+	MX6Q_PAD_NANDF_CS2__ESAI1_TX0,
+	MX6Q_PAD_NANDF_CS3__ESAI1_TX1,
+	/* MX53_PAD_PATA_DATA4__GPIO2_4, */
+
+	/* I2C1 */
+	MX6Q_PAD_CSI0_DAT8__I2C1_SDA,
+	MX6Q_PAD_CSI0_DAT9__I2C1_SCL,
+
 	/* I2C2 */
 	MX6Q_PAD_KEY_COL3__I2C2_SCL,
 	MX6Q_PAD_KEY_ROW3__I2C2_SDA,
@@ -210,6 +231,13 @@ static iomux_v3_cfg_t mx6q_sabreauto_pads[] = {
 	/* I2C3 */
 	MX6Q_PAD_GPIO_5__I2C3_SCL,
 	MX6Q_PAD_GPIO_16__I2C3_SDA,
+
+	/* HDMI */
+	MX6Q_PAD_EIM_A25__HDMI_TX_CEC_LINE,
+	MX6Q_PAD_SD1_DAT1__HDMI_TX_OPHYDTB_0,
+	MX6Q_PAD_SD1_DAT0__HDMI_TX_OPHYDTB_1,
+
+	/* USBOTG ID pin */
 	MX6Q_PAD_GPIO_1__USBOTG_ID,
 };
 static const struct esdhc_platform_data mx6q_sabreauto_sd3_data __initconst = {
@@ -293,7 +321,7 @@ static int max7310_u48_setup(struct i2c_client *client,
 	void *context)
 {
 	int max7310_gpio_value[] = {
-		0, 1, 1, 0, 0, 0, 0, 0,
+		0, 1, 1, 1, 0, 0, 0, 0,
 	};
 
 	int n;
@@ -339,8 +367,18 @@ static struct fsl_mxc_dvi_platform_data sabr_ddc_dvi_data = {
 	.update = ddc_dvi_update,
 };
 
+static struct i2c_board_info mxc_i2c0_board_info[] __initdata = {
+	{
+		I2C_BOARD_INFO("cs42888", 0x48),
+	},
+};
+
 static struct imxi2c_platform_data mx6q_sabreauto_i2c_data = {
 	.bitrate = 400000,
+};
+
+static struct imxi2c_platform_data mx6q_sabreauto_i2c0_data = {
+	.bitrate = 100000,
 };
 
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
@@ -377,6 +415,9 @@ static struct i2c_board_info mxc_i2c1_board_info[] __initdata = {
 		I2C_BOARD_INFO("p1003_fwv33", 0x41),
 		.irq = gpio_to_irq(MX6Q_SABREAUTO_CAP_TCH_INT),
 		.platform_data = &p1003_ts_data,
+	},
+	{
+		I2C_BOARD_INFO("mxc_hdmi_i2c", 0x50),
 	},
 };
 
@@ -492,6 +533,11 @@ static struct ahci_platform_data mx6q_sabreauto_sata_data = {
 	.exit = mx6q_sabreauto_sata_exit,
 };
 
+static struct imx_asrc_platform_data imx_asrc_data = {
+	.channel_bits = 4,
+	.clk_map_ver = 2,
+};
+
 static struct ipuv3_fb_platform_data sabr_fb_data[] = {
 	{ /*fb0*/
 	.disp_dev = "lcd",
@@ -506,6 +552,12 @@ static struct ipuv3_fb_platform_data sabr_fb_data[] = {
 	.default_bpp = 16,
 	.int_clk = false,
 	},
+};
+
+static struct fsl_mxc_lcd_platform_data hdmi_data = {
+	.ipu_id = 0,
+	.disp_id = 0,
+	.default_ifmt = IPU_PIX_FMT_RGB24,
 };
 
 static struct android_pmem_platform_data android_pmem_data = {
@@ -620,6 +672,36 @@ static const struct pm_platform_data mx6q_sabreauto_pm_data __initconst = {
 	.suspend_enter = sabreauto_suspend_enter,
 	.suspend_exit = sabreauto_suspend_exit,
 };
+
+static struct mxc_audio_platform_data sab_audio_data = {
+	.sysclk = 16934400,
+};
+
+static struct platform_device sab_audio_device = {
+	.name = "imx-cs42888",
+};
+
+static struct imx_esai_platform_data sab_esai_pdata = {
+	.flags = IMX_ESAI_NET,
+};
+
+static int imx6q_init_audio(void)
+{
+	struct clk *pll3_pfd, *esai_clk;
+	mxc_register_device(&sab_audio_device, &sab_audio_data);
+	imx6q_add_imx_esai(0, &sab_esai_pdata);
+
+	esai_clk = clk_get(NULL, "esai_clk");
+	if (IS_ERR(esai_clk))
+		return PTR_ERR(esai_clk);
+
+	pll3_pfd = clk_get(NULL, "pll3_pfd_508M");
+	if (IS_ERR(pll3_pfd))
+		return PTR_ERR(pll3_pfd);
+
+	clk_set_parent(esai_clk, pll3_pfd);
+	clk_set_rate(esai_clk, 101647058);
+}
 /*!
  * Board specific initialization.
  */
@@ -644,12 +726,17 @@ static void __init mx6_board_init(void)
 
 	imx6q_add_imx_snvs_rtc();
 
+	imx6q_add_imx_i2c(0, &mx6q_sabreauto_i2c0_data);
 	imx6q_add_imx_i2c(1, &mx6q_sabreauto_i2c_data);
 	imx6q_add_imx_i2c(2, &mx6q_sabreauto_i2c_data);
+	i2c_register_board_info(0, mxc_i2c0_board_info,
+			ARRAY_SIZE(mxc_i2c0_board_info));
 	i2c_register_board_info(1, mxc_i2c1_board_info,
 			ARRAY_SIZE(mxc_i2c1_board_info));
 	i2c_register_board_info(2, mxc_i2c2_board_info,
 			ARRAY_SIZE(mxc_i2c2_board_info));
+
+	imx6q_add_mxc_hdmi(&hdmi_data);
 
 	imx6q_add_anatop_thermal_imx(1, &mx6q_sabreauto_anatop_thermal_data);
 	imx6q_init_fec();
@@ -670,6 +757,11 @@ static void __init mx6_board_init(void)
 	imx6q_sabreauto_init_usb();
 	imx6q_add_ahci(0, &mx6q_sabreauto_sata_data);
 	imx6q_add_vpu();
+	imx6q_init_audio();
+
+	imx_asrc_data.asrc_core_clk = clk_get(NULL, "asrc_clk");
+	imx_asrc_data.asrc_audio_clk = clk_get(NULL, "mxc_alsa_spdif.1");
+	imx6q_add_asrc(&imx_asrc_data);
 
 	/* DISP0 Detect */
 	gpio_request(MX6Q_SABREAUTO_DISP0_DET_INT, "disp0-detect");

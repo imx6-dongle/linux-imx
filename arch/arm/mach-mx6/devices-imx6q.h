@@ -73,6 +73,10 @@ extern const struct imx_fsl_usb2_wakeup_data imx6q_fsl_hs_wakeup_data[] __initco
 #define imx6q_add_fsl_usb2_hs_wakeup(id, pdata)	\
 	imx_add_fsl_usb2_wakeup(&imx6q_fsl_hs_wakeup_data[id - 1], pdata)
 
+extern const struct imx_imx_esai_data imx6q_imx_esai_data[] __initconst;
+#define imx6q_add_imx_esai(id, pdata) \
+	imx_add_imx_esai(&imx6q_imx_esai_data[id], pdata)
+
 extern const struct imx_viv_gpu_data imx6_gc2000_data __initconst;
 extern const struct imx_viv_gpu_data imx6_gc320_data __initconst;
 extern const struct imx_viv_gpu_data imx6_gc355_data __initconst;
@@ -101,6 +105,10 @@ extern const struct imx_ldb_data imx6q_ldb_data __initconst;
 	platform_device_register_resndata(NULL, "mxc_v4l2_capture",\
 			id, NULL, 0, NULL, 0);
 
+extern const struct fsl_mxc_lcd_platform_data imx6q_mxc_hdmi_data __initconst;
+#define imx6q_add_mxc_hdmi(pdata)	\
+	imx_add_mxc_hdmi(&imx6q_mxc_hdmi_data, pdata)
+
 extern const struct imx_vpu_data imx6q_vpu_data __initconst;
 #define imx6q_add_vpu() imx_add_vpu(&imx6q_vpu_data)
 
@@ -115,3 +123,7 @@ extern const struct imx_imx2_wdt_data imx6q_imx2_wdt_data[] __initconst;
 extern const struct imx_pm_imx_data imx6q_pm_imx_data __initconst;
 #define imx6q_add_pm_imx(id, pdata)	\
 	imx_add_pm_imx(&imx6q_pm_imx_data, pdata)
+
+extern const struct imx_imx_asrc_data imx6q_imx_asrc_data[] __initconst;
+#define imx6q_add_asrc(pdata)	\
+	imx_add_imx_asrc(imx6q_imx_asrc_data, pdata)

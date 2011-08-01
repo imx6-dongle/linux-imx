@@ -18,6 +18,7 @@
  *
  * @ingroup IPU
  */
+
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
@@ -1042,7 +1043,7 @@ int32_t ipu_init_sync_panel(struct ipu_soc *ipu, int disp, uint32_t pixel_clk,
 	uint32_t field1_offset;
 	uint32_t reg;
 	uint32_t di_gen, vsync_cnt;
-	uint32_t div, rounded_pixel_clk;
+	uint32_t div, rounded_pixel_clk, rounded_parent_clk;
 	uint32_t h_total, v_total;
 	int map;
 	struct clk *di_parent;
@@ -1084,8 +1085,15 @@ int32_t ipu_init_sync_panel(struct ipu_soc *ipu, int disp, uint32_t pixel_clk,
 					"ext di clk already in use, go back to internal clk\n");
 			else {
 				rounded_pixel_clk = pixel_clk * 2;
-				while (rounded_pixel_clk < 150000000)
-					rounded_pixel_clk += pixel_clk * 2;
+				rounded_parent_clk = clk_round_rate(di_parent,
+							rounded_pixel_clk);
+				while (rounded_pixel_clk < rounded_parent_clk) {
+					/* the max divider from parent to di is 8 */
+					if (rounded_parent_clk / pixel_clk < 8)
+						rounded_pixel_clk += pixel_clk * 2;
+					else
+						rounded_pixel_clk *= 2;
+				}
 				clk_set_rate(di_parent, rounded_pixel_clk);
 				rounded_pixel_clk =
 					clk_round_rate(ipu->di_clk[disp], pixel_clk);

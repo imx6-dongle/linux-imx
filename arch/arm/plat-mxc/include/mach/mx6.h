@@ -84,8 +84,8 @@
 #define CAAM_ARB_END_ADDR               0x00103FFF
 #define APBH_DMA_ARB_BASE_ADDR          0x00110000
 #define APBH_DMA_ARB_END_ADDR           0x00117FFF
-#define HDMI_ARB_BASE_ADDR              0x00120000
-#define HDMI_ARB_END_ADDR               0x00128FFF
+#define MX6Q_HDMI_ARB_BASE_ADDR         0x00120000
+#define MX6Q_HDMI_ARB_END_ADDR          0x00128FFF
 #define GPU_3D_ARB_BASE_ADDR            0x00130000
 #define GPU_3D_ARB_END_ADDR             0x00133FFF
 #define GPU_2D_ARB_BASE_ADDR            0x00134000
@@ -139,7 +139,7 @@
 #define SSI1_BASE_ADDR              (ATZ1_BASE_ADDR + 0x28000) /* slot 10 */
 #define SSI2_BASE_ADDR              (ATZ1_BASE_ADDR + 0x2C000) /* slot 11 */
 #define SSI3_BASE_ADDR              (ATZ1_BASE_ADDR + 0x30000) /* slot 12 */
-#define ASRC_BASE_ADDR              (ATZ1_BASE_ADDR + 0x34000) /* slot 13 */
+#define MX6Q_ASRC_BASE_ADDR	    (ATZ1_BASE_ADDR + 0x34000) /* slot 13 */
 #define SPBA_BASE_ADDR              (ATZ1_BASE_ADDR + 0x3C000) /* slot 15 */
 #define MX6Q_VPU_BASE_ADDR          (ATZ1_BASE_ADDR + 0x40000) /* slot 33,
 					global en[1], til 0x7BFFF */
@@ -242,7 +242,7 @@
 #define MX6Q_FEC_BASE_ADDR	 ENET_BASE_ADDR
 
 /* define virtual address */
-#define PERIPBASE_VIRT 0xF4000000
+#define PERIPBASE_VIRT 0xF2000000
 #define AIPS1_BASE_ADDR_VIRT (PERIPBASE_VIRT + AIPS1_ARB_BASE_ADDR)
 #define AIPS2_BASE_ADDR_VIRT (PERIPBASE_VIRT + AIPS2_ARB_BASE_ADDR)
 #define ARM_PERIPHBASE_VIRT	 (PERIPBASE_VIRT + ARM_PERIPHBASE)
@@ -319,7 +319,7 @@
 #define MXC_INT_SSI2                               79
 #define MXC_INT_SSI3                               80
 #define MXC_INT_ANATOP_TEMPSNSR                    81
-#define MXC_INT_ASRC                               82
+#define MX6Q_INT_ASRC                               82
 #define MXC_INT_ESAI                              83
 #define MXC_INT_SPDIF                              84
 #define MXC_INT_MLB                                85
@@ -384,8 +384,8 @@
 #define MXC_INT_PERFMON1                           144
 #define MXC_INT_PERFMON2                           145
 #define MXC_INT_PERFMON3                           146
-#define MXC_INT_HDMI_TX                            147
-#define MXC_INT_HDMI_TX_WAKEUP                     148
+#define MX6Q_INT_HDMI_TX                           147
+#define MX6Q_INT_HDMI_TX_WAKEUP                    148
 #define MXC_INT_MLB_AHB0                           149
 #define MXC_INT_ENET1                              150
 #define MXC_INT_ENET2                              151
