@@ -102,10 +102,10 @@ static long mxc_ipu_ioctl(struct file *file,
 
 			if (!parm.flag) {
 				ret =
-					ipu_init_channel(parm.channel,
+					ipu_init_channel(ipu_get_soc(0), parm.channel,
 							&parm.params);
 			} else {
-				ret = ipu_init_channel(parm.channel, NULL);
+				ret = ipu_init_channel(ipu_get_soc(0), parm.channel, NULL);
 			}
 		}
 		break;
@@ -115,7 +115,7 @@ static long mxc_ipu_ioctl(struct file *file,
 		int __user *argp = (void __user *)arg;
 		if (get_user(ch, argp))
 				return -EFAULT;
-			ipu_uninit_channel(ch);
+			ipu_uninit_channel(ipu_get_soc(0), ch);
 		}
 		break;
 	case IPU_INIT_CHANNEL_BUFFER:
@@ -128,6 +128,7 @@ static long mxc_ipu_ioctl(struct file *file,
 
 			ret =
 				ipu_init_channel_buffer(
+						ipu_get_soc(0),
 						parm.channel, parm.type,
 						parm.pixel_fmt,
 						parm.width, parm.height,
@@ -153,6 +154,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				&& (parm.phyaddr_1 == (dma_addr_t) NULL)) {
 				ret =
 					ipu_update_channel_buffer(
+							ipu_get_soc(0),
 							parm.channel,
 							parm.type,
 							parm.bufNum,
@@ -161,6 +163,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				&& (parm.phyaddr_1 != (dma_addr_t) NULL)) {
 				ret =
 					ipu_update_channel_buffer(
+							ipu_get_soc(0),
 							parm.channel,
 							parm.type,
 							parm.bufNum,
@@ -180,7 +183,9 @@ static long mxc_ipu_ioctl(struct file *file,
 				return -EFAULT;
 
 			ret =
-				ipu_select_buffer(parm.channel,
+				ipu_select_buffer(
+					ipu_get_soc(0),
+					parm.channel,
 					parm.type, parm.bufNum);
 
 		}
@@ -193,7 +198,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				sizeof(uint32_t)))
 				return -EFAULT;
 
-			ret = ipu_select_multi_vdi_buffer(parm);
+			ret = ipu_select_multi_vdi_buffer(ipu_get_soc(0), parm);
 		}
 		break;
 	case IPU_LINK_CHANNELS:
@@ -204,7 +209,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				sizeof(ipu_channel_link)))
 				return -EFAULT;
 
-			ret = ipu_link_channels(link.src_ch,
+			ret = ipu_link_channels(ipu_get_soc(0), link.src_ch,
 				link.dest_ch);
 
 		}
@@ -217,7 +222,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				sizeof(ipu_channel_link)))
 				return -EFAULT;
 
-			ret = ipu_unlink_channels(link.src_ch,
+			ret = ipu_unlink_channels(ipu_get_soc(0), link.src_ch,
 				link.dest_ch);
 
 		}
@@ -228,7 +233,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			int __user *argp = (void __user *)arg;
 			if (get_user(ch, argp))
 				return -EFAULT;
-			ipu_enable_channel(ch);
+			ipu_enable_channel(ipu_get_soc(0), ch);
 		}
 		break;
 	case IPU_DISABLE_CHANNEL:
@@ -239,7 +244,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				 sizeof(ipu_channel_info)))
 				return -EFAULT;
 
-			ret = ipu_disable_channel(info.channel,
+			ret = ipu_disable_channel(ipu_get_soc(0), info.channel,
 				info.stop);
 		}
 		break;
@@ -249,7 +254,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			int __user *argp = (void __user *)arg;
 			if (get_user(irq, argp))
 				return -EFAULT;
-			ipu_enable_irq(irq);
+			ipu_enable_irq(ipu_get_soc(0), irq);
 		}
 		break;
 	case IPU_DISABLE_IRQ:
@@ -258,7 +263,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			int __user *argp = (void __user *)arg;
 			if (get_user(irq, argp))
 				return -EFAULT;
-			ipu_disable_irq(irq);
+			ipu_disable_irq(ipu_get_soc(0), irq);
 		}
 		break;
 	case IPU_CLEAR_IRQ:
@@ -267,7 +272,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			int __user *argp = (void __user *)arg;
 			if (get_user(irq, argp))
 				return -EFAULT;
-			ipu_clear_irq(irq);
+			ipu_clear_irq(ipu_get_soc(0), irq);
 		}
 		break;
 	case IPU_FREE_IRQ:
@@ -279,7 +284,7 @@ static long mxc_ipu_ioctl(struct file *file,
 					 sizeof(ipu_irq_info)))
 				return -EFAULT;
 
-			ipu_free_irq(info.irq, info.dev_id);
+			ipu_free_irq(ipu_get_soc(0), info.irq, info.dev_id);
 			irq_info[info.irq].irq_pending = 0;
 		}
 		break;
@@ -289,7 +294,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			int __user *argp = (void __user *)arg;
 			if (get_user(irq, argp))
 				return -EFAULT;
-			ret = ipu_get_irq_status(irq);
+			ret = ipu_get_irq_status(ipu_get_soc(0), irq);
 		}
 		break;
 	case IPU_REGISTER_GENERIC_ISR:
@@ -301,7 +306,7 @@ static long mxc_ipu_ioctl(struct file *file,
 				return -EFAULT;
 
 			ret =
-				ipu_request_irq(info.irq,
+				ipu_request_irq(ipu_get_soc(0), info.irq,
 					mxc_ipu_generic_handler,
 					0, "video_sink", info.dev);
 			if (ret == 0)
@@ -381,7 +386,7 @@ static long mxc_ipu_ioctl(struct file *file,
 					 sizeof(ipu_channel_t)))
 				return -EFAULT;
 
-			if (ipu_is_channel_busy(chan))
+			if (ipu_is_channel_busy(ipu_get_soc(0), chan))
 				ret = 1;
 			else
 				ret = 0;
@@ -415,7 +420,8 @@ static long mxc_ipu_ioctl(struct file *file,
 			if (copy_from_user (&offset_parm, (ipu_buf_offset_parm *)arg,
 					 sizeof(ipu_buf_offset_parm)))
 				return -EFAULT;
-			ret = ipu_update_channel_offset(offset_parm.channel,
+			ret = ipu_update_channel_offset(ipu_get_soc(0),
+							offset_parm.channel,
 							offset_parm.type,
 							offset_parm.pixel_fmt,
 							offset_parm.width,
@@ -437,7 +443,7 @@ static long mxc_ipu_ioctl(struct file *file,
 			if (copy_from_user(&param[0][0], (void *) csc.param,
 					   sizeof(param)))
 				return -EFAULT;
-			ipu_set_csc_coefficients(csc.channel, param);
+			ipu_set_csc_coefficients(ipu_get_soc(0), csc.channel, param);
 		}
 		break;
 	default:
