@@ -618,7 +618,8 @@ static int __devinit ipu_probe(struct platform_device *pdev)
 
 	clk_disable(ipu->ipu_clk);
 
-	register_ipu_device();
+	if (pdev->id == 0)
+		register_ipu_device();
 
 	return ret;
 
