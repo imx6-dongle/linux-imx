@@ -244,11 +244,50 @@ static const struct esdhc_platform_data mx6q_sabreauto_sd3_data __initconst = {
 	.cd_gpio = MX6Q_SABREAUTO_SD3_CD,
 	.wp_gpio = MX6Q_SABREAUTO_SD3_WP,
 	.support_18v = 1,
+	.support_8bit = 1,
 };
 
 /* No card detect signal for SD4 */
 static const struct esdhc_platform_data mx6q_sabreauto_sd4_data __initconst = {
 	.always_present = 1,
+	.support_8bit = 1,
+};
+
+/* The GPMI is conflicted with SD3, so init this in the driver. */
+static iomux_v3_cfg_t mx6q_gpmi_nand[] __initdata = {
+	MX6Q_PAD_NANDF_CLE__RAWNAND_CLE,
+	MX6Q_PAD_NANDF_ALE__RAWNAND_ALE,
+	MX6Q_PAD_NANDF_CS0__RAWNAND_CE0N,
+	MX6Q_PAD_NANDF_CS1__RAWNAND_CE1N,
+	MX6Q_PAD_NANDF_CS2__RAWNAND_CE2N,
+	MX6Q_PAD_NANDF_CS3__RAWNAND_CE3N,
+	MX6Q_PAD_NANDF_RB0__RAWNAND_READY0,
+	MX6Q_PAD_SD4_DAT0__RAWNAND_DQS,
+	MX6Q_PAD_NANDF_D0__RAWNAND_D0,
+	MX6Q_PAD_NANDF_D1__RAWNAND_D1,
+	MX6Q_PAD_NANDF_D2__RAWNAND_D2,
+	MX6Q_PAD_NANDF_D3__RAWNAND_D3,
+	MX6Q_PAD_NANDF_D4__RAWNAND_D4,
+	MX6Q_PAD_NANDF_D5__RAWNAND_D5,
+	MX6Q_PAD_NANDF_D6__RAWNAND_D6,
+	MX6Q_PAD_NANDF_D7__RAWNAND_D7,
+	MX6Q_PAD_SD4_CMD__RAWNAND_RDN,
+	MX6Q_PAD_SD4_CLK__RAWNAND_WRN,
+	MX6Q_PAD_NANDF_WP_B__RAWNAND_RESETN,
+};
+
+static int gpmi_nfc_platform_init(void)
+{
+	return mxc_iomux_v3_setup_multiple_pads(mx6q_gpmi_nand,
+					ARRAY_SIZE(mx6q_gpmi_nand));
+}
+
+static const struct gpmi_nfc_platform_data
+mx6q_gpmi_nfc_platform_data __initconst = {
+	.platform_init           = gpmi_nfc_platform_init,
+	.min_prop_delay_in_ns    = 5,
+	.max_prop_delay_in_ns    = 9,
+	.max_chip_count          = 1,
 };
 
 static const struct anatop_thermal_platform_data mx6q_sabreauto_anatop_thermal_data __initconst = {
@@ -448,7 +487,7 @@ static void __init imx6q_sabreauto_init_usb(void)
 	mx6_usb_dr_init();
 	mx6_usb_h1_init();
 }
-static struct viv_gpu_platform_data imx6q_gc2000_pdata __initdata = {
+static struct viv_gpu_platform_data imx6q_gpu_pdata __initdata = {
 	.reserved_mem_size = SZ_128M,
 };
 
@@ -752,9 +791,7 @@ static void __init mx6_board_init(void)
 	imx6q_add_pm_imx(0, &mx6q_sabreauto_pm_data);
 	imx6q_add_sdhci_usdhc_imx(3, &mx6q_sabreauto_sd4_data);
 	imx6q_add_sdhci_usdhc_imx(2, &mx6q_sabreauto_sd3_data);
-	imx_add_viv_gpu("gc2000", &imx6_gc2000_data, &imx6q_gc2000_pdata);
-	imx_add_viv_gpu("gc355", &imx6_gc355_data, NULL);
-	imx_add_viv_gpu("gc320", &imx6_gc320_data, NULL);
+	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
 	mxc_register_device(&mxc_android_pmem_device, &android_pmem_data);
 	mxc_register_device(&mxc_android_pmem_gpu_device,
 			    &android_pmem_gpu_data);
@@ -790,6 +827,8 @@ static void __init mx6_board_init(void)
 	gpio_direction_output(MX6Q_SABREAUTO_LDB_BACKLIGHT, 1);
 	imx6q_add_otp();
 	imx6q_add_imx2_wdt(0, NULL);
+	imx6q_add_dma();
+	imx6q_add_gpmi(&mx6q_gpmi_nfc_platform_data);
 }
 
 extern void __iomem *twd_base;
@@ -814,11 +853,11 @@ static void __init mx6q_reserve(void)
 {
 	phys_addr_t phys;
 
-	if (imx6q_gc2000_pdata.reserved_mem_size) {
-		phys = memblock_alloc_base(imx6q_gc2000_pdata.reserved_mem_size, SZ_4K, SZ_2G);
-		memblock_free(phys, imx6q_gc2000_pdata.reserved_mem_size);
-		memblock_remove(phys, imx6q_gc2000_pdata.reserved_mem_size);
-		imx6q_gc2000_pdata.reserved_mem_base = phys;
+	if (imx6q_gpu_pdata.reserved_mem_size) {
+		phys = memblock_alloc_base(imx6q_gpu_pdata.reserved_mem_size, SZ_4K, SZ_2G);
+		memblock_free(phys, imx6q_gpu_pdata.reserved_mem_size);
+		memblock_remove(phys, imx6q_gpu_pdata.reserved_mem_size);
+		imx6q_gpu_pdata.reserved_mem_base = phys;
 	}
 }
 

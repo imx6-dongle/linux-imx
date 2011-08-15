@@ -32,6 +32,11 @@ imx6q_anatop_thermal_imx_data __initconst;
 #define imx6q_add_anatop_thermal_imx(id, pdata)	\
 	imx_add_anatop_thermal_imx(&imx6q_anatop_thermal_imx_data, pdata)
 
+extern const struct imx_dma_data imx6q_dma_data __initconst;
+#define imx6q_add_dma()	imx_add_dma(&imx6q_dma_data);
+
+#define imx6q_add_gpmi(platform_data)	imx_add_gpmi(platform_data);
+
 extern const struct imx_fec_data imx6q_fec_data __initconst;
 #define imx6q_add_fec(pdata)	\
 	imx_add_fec(&imx6q_fec_data, pdata)
@@ -77,9 +82,7 @@ extern const struct imx_imx_esai_data imx6q_imx_esai_data[] __initconst;
 #define imx6q_add_imx_esai(id, pdata) \
 	imx_add_imx_esai(&imx6q_imx_esai_data[id], pdata)
 
-extern const struct imx_viv_gpu_data imx6_gc2000_data __initconst;
-extern const struct imx_viv_gpu_data imx6_gc320_data __initconst;
-extern const struct imx_viv_gpu_data imx6_gc355_data __initconst;
+extern const struct imx_viv_gpu_data imx6_gpu_data __initconst;
 
 extern const struct imx_ahci_data imx6q_ahci_data __initconst;
 #define imx6q_add_ahci(id, pdata)   \
