@@ -42,6 +42,10 @@
 #define GPC_IMR2_OFFSET				0x0c
 #define GPC_IMR3_OFFSET				0x10
 #define GPC_IMR4_OFFSET				0x14
+#define GPC_ISR1_OFFSET				0x18
+#define GPC_ISR2_OFFSET				0x1c
+#define GPC_ISR3_OFFSET				0x20
+#define GPC_ISR4_OFFSET				0x24
 #define GPC_PGC_CPU_PDN_OFFSET		0x2a0
 #define GPC_PGC_CPU_PUPSCR_OFFSET	0x2a4
 #define GPC_PGC_CPU_PDNSCR_OFFSET	0x2a8
@@ -61,6 +65,9 @@ static int org_freq;
 extern int set_cpu_freq(int wp);
 #endif
 extern void mx6q_suspend(suspend_state_t state);
+extern void mx6_init_irq(void);
+extern int mxc_init_l2x0(void);
+extern unsigned int gpc_wake_irq[4];
 static struct device *pm_dev;
 struct clk *gpc_dvfs_clk;
 
@@ -68,9 +75,14 @@ static void __iomem *scu_base;
 static void __iomem *gpc_base;
 static void __iomem *src_base;
 static void __iomem *local_twd_base;
-static void __iomem *pl310_base;
 static void __iomem *gic_dist_base;
 static void __iomem *gic_cpu_base;
+static void __iomem *uart4_base;
+
+static void *suspend_iram_base;
+static void (*suspend_in_iram)(suspend_state_t state,
+	unsigned long iram_paddr, unsigned long suspend_iram_base) = NULL;
+static unsigned long iram_paddr, cpaddr;
 
 static u32 ccm_clpcr, scu_ctrl;
 static u32 gpc_imr[4], gpc_cpu_pup, gpc_cpu_pdn, gpc_cpu;
@@ -115,8 +127,28 @@ static void mx6_suspend_restore(void)
 	__raw_writel(local_timer[3], local_twd_base + LOCAL_TWD_INT_OFFSET);
 #endif
 }
+
 static int mx6_suspend_enter(suspend_state_t state)
 {
+	unsigned int wake_irq_isr[4];
+
+	wake_irq_isr[0] = __raw_readl(gpc_base +
+			GPC_ISR1_OFFSET) & gpc_wake_irq[0];
+	wake_irq_isr[1] = __raw_readl(gpc_base +
+			GPC_ISR1_OFFSET) & gpc_wake_irq[1];
+	wake_irq_isr[2] = __raw_readl(gpc_base +
+			GPC_ISR1_OFFSET) & gpc_wake_irq[2];
+	wake_irq_isr[3] = __raw_readl(gpc_base +
+			GPC_ISR1_OFFSET) & gpc_wake_irq[3];
+	if (wake_irq_isr[0] | wake_irq_isr[1] |
+			wake_irq_isr[2] | wake_irq_isr[3]) {
+		printk(KERN_INFO "There are wakeup irq pending,system resume!\n");
+		printk(KERN_INFO "wake_irq_isr[0-3]: 0x%x, 0x%x, 0x%x, 0x%x\n",
+				wake_irq_isr[0], wake_irq_isr[1],
+				wake_irq_isr[2], wake_irq_isr[3]);
+		return 0;
+	}
+
 	mx6_suspend_store();
 
 	switch (state) {
@@ -136,19 +168,19 @@ static int mx6_suspend_enter(suspend_state_t state)
 
 		local_flush_tlb_all();
 		flush_cache_all();
+#ifdef CONFIG_CACHE_L2X0
 		outer_cache.flush_all();
 
 		/* for dormant mode, we need to disable l2 cache */
 		if (state == PM_SUSPEND_MEM)
 			outer_cache.disable();
-
-		/* mx6q mmdc can enter self-refresh when ARM enter wfi
-		 * , so no need to run the code in the iram */
-		mx6q_suspend(state);
+#endif
+		suspend_in_iram(state, (unsigned long)iram_paddr,
+			(unsigned long)suspend_iram_base);
 
 		if (state == PM_SUSPEND_MEM) {
-			/* need to re-init gic */
-			gic_init(0, 29, gic_dist_base, gic_cpu_base);
+			/* need to re-init irq */
+			mx6_init_irq();
 
 #ifdef CONFIG_LOCAL_TIMERS
 			gic_enable_ppi(IRQ_LOCALTIMER);
@@ -162,8 +194,10 @@ static int mx6_suspend_enter(suspend_state_t state)
 					(MXC_INT_GPT / 32) * 4);
 
 			flush_cache_all();
+#ifdef CONFIG_CACHE_L2X0
 			/* init l2 cache, pl310 */
-			l2x0_init(pl310_base, 0x0, ~0x00000000);
+			mxc_init_l2x0();
+#endif
 		}
 
 		mx6_suspend_restore();
@@ -247,10 +281,10 @@ static int __init pm_init(void)
 	scu_base = IO_ADDRESS(SCU_BASE_ADDR);
 	gpc_base = IO_ADDRESS(GPC_BASE_ADDR);
 	src_base = IO_ADDRESS(SRC_BASE_ADDR);
-	pl310_base = IO_ADDRESS(L2_BASE_ADDR);
 	gic_dist_base = IO_ADDRESS(IC_DISTRIBUTOR_BASE_ADDR);
 	gic_cpu_base = IO_ADDRESS(IC_INTERFACES_BASE_ADDR);
 	local_twd_base = IO_ADDRESS(LOCAL_TWD_ADDR);
+	uart4_base = IO_ADDRESS(0x21f0000);
 
 	pr_info("Static Power Management for Freescale i.MX6\n");
 
@@ -260,6 +294,23 @@ static int __init pm_init(void)
 	}
 
 	suspend_set_ops(&mx6_suspend_ops);
+	/* Move suspend routine into iRAM */
+	cpaddr = (unsigned long)iram_alloc(SZ_4K, &iram_paddr);
+	/* Need to remap the area here since we want the memory region
+		 to be executable. */
+	suspend_iram_base = __arm_ioremap(iram_paddr, SZ_4K,
+					  MT_MEMORY);
+	pr_info("cpaddr = %x suspend_iram_base=%x\n",
+		(unsigned int)cpaddr, (unsigned int)suspend_iram_base);
+
+	/*
+	 * Need to run the suspend code from IRAM as the DDR needs
+	 * to be put into low power mode manually.
+	 */
+	memcpy((void *)cpaddr, mx6q_suspend, SZ_4K);
+
+	suspend_in_iram = (void *)suspend_iram_base;
+
 	cpu_clk = clk_get(NULL, "cpu_clk");
 	if (IS_ERR(cpu_clk)) {
 		printk(KERN_DEBUG "%s: failed to get cpu_clk\n", __func__);
