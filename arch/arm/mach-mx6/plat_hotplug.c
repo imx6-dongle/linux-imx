@@ -84,7 +84,7 @@ void platform_cpu_die(unsigned int cpu)
 		 * Execute WFI
 		 */
 		cpu_do_idle();
-		printk(KERN_INFO "CPU%u: spurious wakeup call\n", cpu);
+		//printk(KERN_INFO "CPU%u: spurious wakeup call\n", cpu);
 	}
 }
 
