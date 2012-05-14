@@ -59,6 +59,7 @@
 
 #if defined(CONFIG_ARCH_MXC) || defined(CONFIG_SOC_IMX28)
 #define FEC_ALIGNMENT	0xf
+#define FEC_RX_FIFO_BR  0x480
 #else
 #define FEC_ALIGNMENT	0x3
 #endif
@@ -286,14 +287,13 @@ fec_enet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	unsigned long   estatus;
 	unsigned long flags;
 
-	spin_lock_irqsave(&fep->hw_lock, flags);
 	if (!fep->link) {
 		/* Link is down or autonegotiation is in progress. */
 		netif_stop_queue(ndev);
-		spin_unlock_irqrestore(&fep->hw_lock, flags);
 		return NETDEV_TX_BUSY;
 	}
 
+	spin_lock_irqsave(&fep->hw_lock, flags);
 	/* Fill in a Tx ring entry */
 	bdp = fep->cur_tx;
 
@@ -395,8 +395,7 @@ fec_timeout(struct net_device *ndev)
 	ndev->stats.tx_errors++;
 
 	fec_restart(ndev, fep->full_duplex);
-	if (fep->link && !fep->tx_full)
-		netif_wake_queue(ndev);
+	netif_wake_queue(ndev);
 }
 
 static void
@@ -565,8 +564,11 @@ static int fec_rx_poll(struct napi_struct *napi, int budget)
 				ndev->stats.rx_frame_errors++;
 			if (status & BD_ENET_RX_CR)	/* CRC Error */
 				ndev->stats.rx_crc_errors++;
-			if (status & BD_ENET_RX_OV)	/* FIFO overrun */
+			if (status & BD_ENET_RX_OV) {	/* FIFO overrun */
 				ndev->stats.rx_fifo_errors++;
+				writel(readl(fep->hwp + FEC_X_CNTRL) | 0x8 , fep->hwp + FEC_X_CNTRL);
+				goto rx_processing_done;
+			}
 		}
 
 		/* Report late collisions as a frame error.
@@ -915,8 +917,10 @@ static void fec_enet_adjust_link(struct net_device *ndev)
 		fep->link = phy_dev->link;
 		if (phy_dev->link) {
 			fec_restart(ndev, phy_dev->duplex);
-			if (!fep->tx_full)
+			if (netif_queue_stopped(ndev)) {
+				netif_start_queue(ndev);
 				netif_wake_queue(ndev);
+			}
 		} else
 			fec_stop(ndev);
 		status_change = 1;
@@ -1088,7 +1092,7 @@ static int fec_enet_mii_init(struct platform_device *pdev)
 	 * Set MII speed to 2.5 MHz (= clk_get_rate() / 2 * phy_speed)
 	 */
 	fep->phy_speed = DIV_ROUND_UP(clk_get_rate(fep->clk),
-					(FEC_ENET_MII_CLK << 2)) << 1;
+					(FEC_ENET_MII_CLK << 1)) << 1;
 
 	/* set hold time to 2 internal clock cycle */
 	if (cpu_is_mx6())
@@ -1566,6 +1570,11 @@ fec_restart(struct net_device *dev, int duplex)
 	writel(0, fep->hwp + FEC_HASH_TABLE_LOW);
 #endif
 
+       /* FIXME: adjust RX FIFO size for performance*/
+#ifdef CONFIG_ARCH_MX53
+       writel(FEC_RX_FIFO_BR, fep->hwp + FEC_R_FSTART);
+#endif
+
 	/* Set maximum receive buffer size. */
 	writel(PKT_MAXBLR_SIZE, fep->hwp + FEC_R_BUFF_SIZE);
 
@@ -1589,8 +1598,10 @@ fec_restart(struct net_device *dev, int duplex)
 	/* Enable MII mode */
 	if (duplex) {
 		/* MII enable / FD enable */
-		writel(OPT_FRAME_SIZE | 0x04, fep->hwp + FEC_R_CNTRL);
+		writel(OPT_FRAME_SIZE | 0x24, fep->hwp + FEC_R_CNTRL);
 		writel(0x04, fep->hwp + FEC_X_CNTRL);
+		/* Set the RX Pause frame Interval */
+		writel(0x1ffff, fep->hwp + FEC_OPD);
 	} else {
 		/* MII enable / No Rcv on Xmit */
 		writel(OPT_FRAME_SIZE | 0x06, fep->hwp + FEC_R_CNTRL);
@@ -1623,6 +1634,7 @@ fec_restart(struct net_device *dev, int duplex)
 			val |= (1 << 9);
 
 		writel(val, fep->hwp + FEC_R_CNTRL);
+	}
 
 		if (fep->ptimer_present) {
 			/* Set Timer count */
@@ -1656,7 +1668,6 @@ fec_restart(struct net_device *dev, int duplex)
 			writel(2, fep->hwp + FEC_MIIGSK_ENR);
 		}
 #endif
-	}
 
 	/* ENET enable */
 	val = reg | (0x1 << 1);

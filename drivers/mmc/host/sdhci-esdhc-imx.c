@@ -32,6 +32,7 @@
 #define SDHCI_VENDOR_SPEC		0xC0
 #define  SDHCI_VENDOR_SPEC_SDIO_QUIRK	0x00000002
 
+#define SDHCI_MIX_CTRL_AC12EN		(1 << 2)
 #define SDHCI_MIX_CTRL_AC23EN		(1 << 7)
 #define SDHCI_MIX_CTRL_EXE_TUNE		(1 << 22)
 #define SDHCI_MIX_CTRL_SMPCLK_SEL	(1 << 23)
@@ -433,8 +434,11 @@ static void esdhc_writew_le(struct sdhci_host *host, u16 val, int reg)
 		}
 		imx_data->scratchpad = val;
 
-		if (val & SDHCI_TRNS_AUTO_CMD23)
+		if (cpu_is_mx6() && (val & SDHCI_TRNS_AUTO_CMD23))
 			imx_data->scratchpad |= SDHCI_MIX_CTRL_AC23EN;
+
+		if (val & SDHCI_TRNS_AUTO_CMD12)
+			imx_data->scratchpad |= SDHCI_MIX_CTRL_AC12EN;
 
 		return;
 	case SDHCI_COMMAND:
@@ -702,7 +706,12 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 			| SDHCI_QUIRK_BROKEN_ADMA;
 
 	if (cpu_is_mx6())
-		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23,
+		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23;
+
+	if(cpu_is_mx53()) {
+		host->quirks |= SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12;
+		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23;
+	}
 
 	/* write_protect can't be routed to controller, use gpio */
 	sdhci_esdhc_ops.get_ro = esdhc_pltfm_get_ro;

@@ -731,6 +731,8 @@ struct ipuv3_fb_platform_data {
 	/* reserved mem */
 	resource_size_t 		res_base[2];
 	resource_size_t 		res_size[2];
+	int				panel_width_mm; /* Display panel width in millimeters */
+	int				panel_height_mm; /* Display panel height in millimeters */
 };
 
 struct imx_ipuv3_platform_data {

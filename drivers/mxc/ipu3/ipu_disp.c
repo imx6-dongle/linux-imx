@@ -206,6 +206,7 @@ struct clk_lookup ipu_lookups[MXC_IPU_MAX_NUM][2] = {
 			.con_id = "pixel_clk_1",
 		},
 	},
+#ifdef CONFIG_MXC_IPU_V3H
 	{
 		{
 			.con_id = "pixel_clk_0",
@@ -214,6 +215,7 @@ struct clk_lookup ipu_lookups[MXC_IPU_MAX_NUM][2] = {
 			.con_id = "pixel_clk_1",
 		},
 	},
+#endif
 };
 
 int dmfc_type_setup;

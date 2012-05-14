@@ -84,7 +84,7 @@
 #define CCM_CDCR_ARM_FREQ_SHIFT_DIVIDER		0x4
 #define CCM_CDHIPR_ARM_PODF_BUSY		0x10000
 
-int cpufreq_trig_needed;
+static int cpufreq_trig_needed;
 int dvfs_core_is_active;
 static struct mxc_dvfs_platform_data *dvfs_data;
 static struct device *dvfs_dev;
@@ -114,6 +114,7 @@ static struct delayed_work dvfs_core_handler;
  */
 static struct clk *pll1_sw_clk;
 static struct clk *cpu_clk;
+static struct clk *gpu_clk;
 static struct clk *dvfs_clk;
 
 static int cpu_op_nr;
@@ -189,6 +190,7 @@ static int mx5_set_cpu_freq(int op)
 	int podf;
 	int vinc = 0;
 	int ret = 0;
+	int retry_count = 0;
 	int org_cpu_rate;
 	unsigned long rate = 0;
 	int gp_volt = 0;
@@ -257,6 +259,7 @@ static int mx5_set_cpu_freq(int op)
 			udelay(10);
 		spin_unlock_irqrestore(&mxc_dvfs_core_lock, flags);
 
+		clk_set_rate(cpu_clk, rate);
 		if (rate < org_cpu_rate) {
 			ret = regulator_set_voltage(cpu_regulator, gp_volt,
 						    gp_volt);
@@ -271,10 +274,18 @@ static int mx5_set_cpu_freq(int op)
 		reg = __raw_readl(ccm_base + dvfs_data->ccm_cdcr_offset);
 		reg &= ~(CCM_CDCR_SW_DVFS_EN);
 		reg |= en_sw_dvfs;
-		clk_set_rate(cpu_clk, rate);
 	} else {
 		podf = cpu_op_tbl[op].cpu_podf;
 		gp_volt = cpu_op_tbl[op].cpu_voltage;
+
+		/* Get ARM_PODF */
+		reg = __raw_readl(ccm_base + dvfs_data->ccm_cacrr_offset);
+		arm_podf = reg & 0x07;
+		if (podf == arm_podf) {
+			printk(KERN_DEBUG
+			       "No need to change freq and voltage!!!!\n");
+			return 0;
+		}
 
 		/* Change arm_podf only */
 		/* set ARM_FREQ_SHIFT_DIVIDER */
@@ -290,14 +301,6 @@ static int mx5_set_cpu_freq(int op)
 		reg |= CCM_CDCR_ARM_FREQ_SHIFT_DIVIDER;
 		__raw_writel(reg, ccm_base + dvfs_data->ccm_cdcr_offset);
 
-		/* Get ARM_PODF */
-		reg = __raw_readl(ccm_base + dvfs_data->ccm_cacrr_offset);
-		arm_podf = reg & 0x07;
-		if (podf == arm_podf) {
-			printk(KERN_DEBUG
-			       "No need to change freq and voltage!!!!\n");
-			return 0;
-		}
 		/* Check if FSVAI indicate freq up */
 		if (podf < arm_podf) {
 			ret = regulator_set_voltage(cpu_regulator, gp_volt,
@@ -355,7 +358,10 @@ static int mx5_set_cpu_freq(int op)
 		/* Wait for arm podf Enable */
 		while ((__raw_readl(gpc_base + dvfs_data->gpc_cntr_offset) &
 			MXC_GPCCNTR_STRT) == MXC_GPCCNTR_STRT) {
-			printk(KERN_DEBUG "Waiting arm_podf enabled!\n");
+			if (retry_count)
+				printk(KERN_DEBUG "Waiting arm_podf enabled!\n");
+
+			retry_count++;
 			udelay(10);
 		}
 		spin_unlock_irqrestore(&mxc_dvfs_core_lock, flags);
@@ -577,6 +583,7 @@ static irqreturn_t dvfs_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+extern int clk_get_usecount(struct clk *clk);
 static void dvfs_core_work_handler(struct work_struct *work)
 {
 	u32 fsvai;
@@ -584,8 +591,11 @@ static void dvfs_core_work_handler(struct work_struct *work)
 	u32 curr_cpu = 0;
 	int ret = 0;
 	int low_freq_bus_ready = 0;
+	int disable_dvfs_irq = 0;
 	int bus_incr = 0, cpu_dcr = 0;
+#ifdef CONFIG_CPU_FREQ
 	int cpu;
+#endif
 
 	low_freq_bus_ready = low_freq_bus_used();
 
@@ -598,6 +608,29 @@ static void dvfs_core_work_handler(struct work_struct *work)
 		goto END;
 	}
 	curr_cpu = clk_get_rate(cpu_clk);
+
+	if (clk_get_usecount(gpu_clk)) {
+		maxf = 1;
+		if (curr_cpu != cpu_op_tbl[0].cpu_rate) {
+			curr_op = 0;
+			minf = 0;
+			dvfs_load_config(0);
+			if (!high_bus_freq_mode)
+				set_high_bus_freq(1);
+			set_cpu_freq(curr_op);
+		}
+		/* If we enable DVFS's irq, the irq will keep coming,
+		 * and will consume about 3-40% cpu usage, we disable
+		 * dvfs 's irq here, and let it check the status every
+		 * 100 msecs.  If gpu clk have count to 0, it will
+		 * enable dvfs's irq let it do what it want.*/
+		schedule_delayed_work(&dvfs_core_handler,
+						msecs_to_jiffies(100));
+		disable_dvfs_irq = 1;
+		goto END;
+	} else
+		disable_dvfs_irq = 0;
+
 	/* If FSVAI indicate freq down,
 	   check arm-clk is not in lowest frequency*/
 	if (fsvai == FSVAI_FREQ_DECREASE) {
@@ -687,8 +720,10 @@ END:
 
 	/* Enable DVFS interrupt */
 	/* FSVAIM=0 */
-	reg = (reg & ~MXC_DVFSCNTR_FSVAIM);
-	reg |= FSVAI_FREQ_NOCHANGE;
+	if (!disable_dvfs_irq) {
+		reg = (reg & ~MXC_DVFSCNTR_FSVAIM);
+		reg |= FSVAI_FREQ_NOCHANGE;
+	}
 	/* LBFL=1 */
 	reg = (reg & ~MXC_DVFSCNTR_LBFL);
 	reg |= MXC_DVFSCNTR_LBFL;
@@ -709,7 +744,10 @@ void stop_dvfs(void)
 	u32 reg = 0;
 	unsigned long flags;
 	u32 curr_cpu;
+	u32 old_loops_per_jiffy;
+#ifdef CONFIG_CPU_FREQ
 	int cpu;
+#endif
 
 	if (dvfs_core_is_active) {
 
@@ -736,7 +774,7 @@ void stop_dvfs(void)
 				dvfs_cpu_jiffies(per_cpu(cpu_data, cpu).loops_per_jiffy,
 					curr_cpu/1000, clk_get_rate(cpu_clk) / 1000);
 #else
-		u32 old_loops_per_jiffy = loops_per_jiffy;
+		old_loops_per_jiffy = loops_per_jiffy;
 
 		loops_per_jiffy =
 			dvfs_cpu_jiffies(old_loops_per_jiffy,
@@ -748,6 +786,8 @@ void stop_dvfs(void)
 			for (cpu = 0; cpu < num_online_cpus(); cpu++)
 				cpufreq_get(cpu);
 #endif
+			if (cpufreq_trig_needed == 1)
+				cpufreq_trig_needed = 0;
 		}
 		spin_lock_irqsave(&mxc_dvfs_core_lock, flags);
 
@@ -947,10 +987,18 @@ static int __devinit mxc_dvfs_core_probe(struct platform_device *pdev)
 		printk(KERN_ERR "%s: failed to get cpu clock\n", __func__);
 		return PTR_ERR(cpu_clk);
 	}
-	if (!(cpu_is_mx6q() || cpu_is_mx6dl())) {
+	if (!cpu_is_mx6q()) {
+		gpu_clk = clk_get(NULL, "gpu3d_clk");
+		if (IS_ERR(cpu_clk)) {
+			printk(KERN_ERR "%s: failed to get gpu clock\n",
+								__func__);
+			return PTR_ERR(gpu_clk);
+		}
+
 		dvfs_clk = clk_get(NULL, dvfs_data->clk2_id);
 		if (IS_ERR(dvfs_clk)) {
-			printk(KERN_ERR "%s: failed to get dvfs clock\n", __func__);
+			printk(KERN_ERR "%s: failed to get dvfs clock\n",
+								__func__);
 			return PTR_ERR(dvfs_clk);
 		}
 	}

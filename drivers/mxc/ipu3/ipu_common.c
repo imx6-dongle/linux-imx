@@ -514,6 +514,10 @@ static int __devinit ipu_probe(struct platform_device *pdev)
 	/* Set sync refresh channels and CSI->mem channel as high priority */
 	ipu_idmac_write(ipu, 0x18800001L, IDMAC_CHA_PRI(0));
 
+	/* AXI burst setting for sync refresh channels */
+	if (g_ipu_hw_rev == 3)
+		ipu_idmac_write(ipu, 0x003F0000, IDMAC_CH_LOCK_EN_1);
+
 	/* Set MCU_T to divide MCU access window into 2 */
 	ipu_cm_write(ipu, 0x00400000L | (IPU_MCU_T_DEFAULT << 18), IPU_DISP_GEN);
 
@@ -1169,6 +1173,13 @@ void ipu_uninit_channel(struct ipu_soc *ipu, ipu_channel_t channel)
 	 */
 	if (_ipu_is_primary_disp_chan(in_dma))
 		clk_disable(&ipu->pixel_clk[ipu->dc_di_assignment[dc_chan]]);
+
+	/* Restore IDMAC_LOCK_EN when we don't use dual display */
+	/* and the video mode for single display is not tough */
+	if (!(ipu->di_use_count[0] && ipu->di_use_count[1]) &&
+	    dmfc_type_setup != DMFC_HIGH_RESOLUTION_ONLY_DP &&
+	    _ipu_is_dmfc_chan(in_dma) && g_ipu_hw_rev == 3)
+		ipu_idmac_write(ipu, 0x003F0000, IDMAC_CH_LOCK_EN_1);
 
 	_ipu_unlock(ipu);
 
@@ -2135,6 +2146,16 @@ int32_t ipu_enable_channel(struct ipu_soc *ipu, ipu_channel_t channel)
 	if (ipu->smfc_use_count > 0)
 		ipu_conf |= IPU_CONF_SMFC_EN;
 	ipu_cm_write(ipu, ipu_conf, IPU_CONF);
+
+	/* Clear IDMAC_LOCK_EN to workaround black flash for dual display */
+	/* and for tough video mode of single display */
+	if (g_ipu_hw_rev == 3 && _ipu_is_dmfc_chan(in_dma)) {
+		if ((ipu->di_use_count[1] && ipu->di_use_count[0]) ||
+		    (dmfc_type_setup == DMFC_HIGH_RESOLUTION_ONLY_DP))
+			ipu_idmac_write(ipu, 0x0, IDMAC_CH_LOCK_EN_1);
+		else
+			ipu_idmac_write(ipu, 0x003F0000, IDMAC_CH_LOCK_EN_1);
+	}
 
 	if (idma_is_valid(in_dma)) {
 		reg = ipu_idmac_read(ipu, IDMAC_CHA_EN(in_dma));
@@ -3116,6 +3137,11 @@ static int ipu_resume_noirq(struct device *dev)
 		_ipu_init_dc_mappings(ipu);
 		/* Set sync refresh channels as high priority */
 		ipu_idmac_write(ipu, 0x18800001L, IDMAC_CHA_PRI(0));
+
+		/* AXI burst setting for sync refresh channels */
+		if (g_ipu_hw_rev == 3)
+			ipu_idmac_write(ipu, 0x003F0000, IDMAC_CH_LOCK_EN_1);
+
 		_ipu_put(ipu);
 	}
 

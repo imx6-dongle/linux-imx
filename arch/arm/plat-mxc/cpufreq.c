@@ -34,6 +34,7 @@
 
 static int cpu_freq_khz_min;
 static int cpu_freq_khz_max;
+int cpufreq_suspended;
 
 static struct clk *cpu_clk;
 static struct cpufreq_frequency_table *imx_freq_table;
@@ -131,7 +132,7 @@ static int mxc_set_target(struct cpufreq_policy *policy,
 	if (policy->cpu > num_cpus)
 		return 0;
 
-	if (dvfs_core_is_active) {
+	if (dvfs_core_is_active || cpufreq_suspended) {
 		struct cpufreq_freqs freqs;
 
 		freqs.old = policy->cur;
@@ -182,19 +183,11 @@ static int mxc_set_target(struct cpufreq_policy *policy,
 
 static int mxc_cpufreq_suspend(struct cpufreq_policy *policy)
 {
-	pre_suspend_rate = clk_get_rate(cpu_clk);
-	/* Set to max freq and voltage */
-	if (pre_suspend_rate != (imx_freq_table[0].frequency * 1000))
-		set_cpu_freq(imx_freq_table[0].frequency);
-
 	return 0;
 }
 
 static int mxc_cpufreq_resume(struct cpufreq_policy *policy)
 {
-	if (clk_get_rate(cpu_clk) != pre_suspend_rate)
-		set_cpu_freq(pre_suspend_rate);
-
 	return 0;
 }
 
@@ -263,8 +256,8 @@ static int __devinit mxc_cpufreq_init(struct cpufreq_policy *policy)
 	ret = cpufreq_frequency_table_cpuinfo(policy, imx_freq_table);
 
 	if (ret < 0) {
-		printk(KERN_ERR "%s: failed to register i.MXC CPUfreq with error code %d\n",
-		       __func__, ret);
+		printk(KERN_ERR "%s: failed to register i.MXC CPUfreq \
+				with error code %d\n", __func__, ret);
 		goto err;
 	}
 

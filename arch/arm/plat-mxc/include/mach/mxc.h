@@ -70,6 +70,7 @@
 #define IMX_BOARD_REV_2		0x100
 #define IMX_BOARD_REV_3		0x200
 #define IMX_BOARD_REV_4		0x300
+#define IMX_BOARD_REV_5		0x400
 
 #ifndef __ASSEMBLY__
 extern unsigned int system_rev;

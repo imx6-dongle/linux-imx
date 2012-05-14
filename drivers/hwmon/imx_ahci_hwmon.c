@@ -89,6 +89,11 @@ static ssize_t imx_ahci_hwmon_temp_show(struct device *dev,
 		return -1;
 	}
 
+	/* Disable PDDQ mode when this mode is enabled */
+	read_sum = readl(mmio + PORT_PHY_CTL);
+	if (read_sum & PORT_PHY_CTL_PDDQ_LOC)
+		writel(read_sum & ~PORT_PHY_CTL_PDDQ_LOC, mmio + PORT_PHY_CTL);
+
 	/* check rd-wr to reg */
 	read_sum = 0;
 	sata_phy_cr_addr(SATA_PHY_CR_CLOCK_CRCMP_LT_LIMIT, mmio);
@@ -228,6 +233,10 @@ static ssize_t imx_ahci_hwmon_temp_show(struct device *dev,
 		m2 = 1000;
 	a = (m2 - m1) / (m2 / 1000);
 	temp = ((((-559) * a) / 1000) * a) / 1000 + (1379) * a / 1000 + (-458);
+
+	/* Enable PDDQ mode to save power */
+	read_sum = readl(mmio + PORT_PHY_CTL);
+	writel(read_sum | PORT_PHY_CTL_PDDQ_LOC, mmio + PORT_PHY_CTL);
 
 	iounmap(mmio);
 

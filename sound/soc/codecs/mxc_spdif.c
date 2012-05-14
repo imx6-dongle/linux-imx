@@ -33,6 +33,7 @@
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
 #include <mach/hardware.h>
+#include <mach/clock.h>
 
 #include "mxc_spdif.h"
 
@@ -74,6 +75,7 @@ struct mxc_spdif_priv {
 	atomic_t dpll_locked;	/* DPLL locked status */
 	bool tx_active;
 	bool rx_active;
+	int resume_core_clk;
 };
 
 struct spdif_mixer_control mxc_spdif_control;
@@ -1140,15 +1142,20 @@ static int mxc_spdif_soc_suspend(struct snd_soc_codec *codec,
 
 	plat_data = spdif_priv->plat_data;
 
-	if (spdif_priv->tx_active) {
-		clk_disable(plat_data->spdif_audio_clk);
-		clk_disable(plat_data->spdif_clk);
+	if (clk_get_usecount(plat_data->spdif_core_clk)) {
+		if (spdif_priv->tx_active) {
+			clk_disable(plat_data->spdif_audio_clk);
+			clk_disable(plat_data->spdif_clk);
+		}
+
+		if (spdif_priv->rx_active)
+			clk_disable(plat_data->spdif_clk);
+
+		clk_disable(plat_data->spdif_core_clk);
+		spdif_priv->resume_core_clk = 1;
 	}
-
-	if (spdif_priv->rx_active)
-		clk_disable(plat_data->spdif_clk);
-
-	clk_disable(plat_data->spdif_core_clk);
+	else
+		spdif_priv->resume_core_clk = 0;
 
 	return 0;
 }
@@ -1163,17 +1170,19 @@ static int mxc_spdif_soc_resume(struct snd_soc_codec *codec)
 
 	plat_data = spdif_priv->plat_data;
 
-	clk_enable(plat_data->spdif_core_clk);
+	if (spdif_priv->resume_core_clk == 1) {
+		clk_enable(plat_data->spdif_core_clk);
 
-	if (spdif_priv->tx_active) {
-		clk_enable(plat_data->spdif_clk);
-		clk_enable(plat_data->spdif_audio_clk);
+		if (spdif_priv->tx_active) {
+			clk_enable(plat_data->spdif_clk);
+			clk_enable(plat_data->spdif_audio_clk);
+		}
+
+		if (spdif_priv->rx_active)
+			clk_enable(plat_data->spdif_clk);
+
+		spdif_softreset();
 	}
-
-	if (spdif_priv->rx_active)
-		clk_enable(plat_data->spdif_clk);
-
-	spdif_softreset();
 
 	return 0;
 }
@@ -1236,6 +1245,7 @@ static int __devinit mxc_spdif_probe(struct platform_device *pdev)
 
 	spdif_priv->tx_active = false;
 	spdif_priv->rx_active = false;
+	spdif_priv->resume_core_clk = 0;
 	platform_set_drvdata(pdev, spdif_priv);
 
 	spdif_priv->reg_phys_base = res->start;

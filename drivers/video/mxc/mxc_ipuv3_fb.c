@@ -94,6 +94,9 @@ struct mxcfb_info {
 	struct fb_info *ovfbi;
 
 	struct mxc_dispdrv_handle *dispdrv;
+	bool fb_suspended;
+	int panel_width_mm;
+	int panel_height_mm;
 };
 
 struct mxcfb_alloc_list {
@@ -388,7 +391,8 @@ static int mxcfb_set_par(struct fb_info *fbi)
 		}
 	}
 
-	if (mxc_fbi->next_blank != FB_BLANK_UNBLANK)
+	if (mxc_fbi->next_blank != FB_BLANK_UNBLANK ||
+	    mxc_fbi->fb_suspended)
 		return retval;
 
 	_setup_disp_channel1(fbi);
@@ -745,8 +749,16 @@ static int mxcfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 			var->pixclock);
 	}
 
-	var->height = -1;
-	var->width = -1;
+	if (mxc_fbi->panel_height_mm)
+		var->height = mxc_fbi->panel_height_mm;
+	else
+		var->height = -1;
+
+	if (mxc_fbi->panel_width_mm)
+		var->width = mxc_fbi->panel_width_mm;
+	else
+		var->width = -1;
+
 	var->grayscale = 0;
 
 	return 0;
@@ -1195,6 +1207,9 @@ static int mxcfb_blank(int blank, struct fb_info *info)
 
 	dev_dbg(info->device, "blank = %d\n", blank);
 
+	if (mxc_fbi->fb_suspended)
+		return -EAGAIN;
+
 	if (mxc_fbi->cur_blank == blank)
 		return 0;
 
@@ -1524,6 +1539,7 @@ static int mxcfb_suspend(struct platform_device *pdev, pm_message_t state)
 	saved_blank = mxc_fbi->cur_blank;
 	mxcfb_blank(FB_BLANK_POWERDOWN, fbi);
 	mxc_fbi->next_blank = saved_blank;
+	mxc_fbi->fb_suspended = true;
 	console_unlock();
 
 	return 0;
@@ -1538,6 +1554,7 @@ static int mxcfb_resume(struct platform_device *pdev)
 	struct mxcfb_info *mxc_fbi = (struct mxcfb_info *)fbi->par;
 
 	console_lock();
+	mxc_fbi->fb_suspended = false;
 	mxcfb_blank(mxc_fbi->next_blank, fbi);
 	fb_set_suspend(fbi, 0);
 	console_unlock();
@@ -2047,7 +2064,11 @@ static int mxcfb_probe(struct platform_device *pdev)
 	mxcfb_option_setup(pdev);
 
 	mxcfbi = (struct mxcfb_info *)fbi->par;
+	mxcfbi->fb_suspended = false;
 	mxcfbi->ipu_int_clk = plat_data->int_clk;
+	mxcfbi->panel_width_mm = plat_data->panel_width_mm;
+	mxcfbi->panel_height_mm = plat_data->panel_height_mm;
+
 	ret = mxcfb_dispdrv_init(pdev, fbi);
 	if (ret < 0)
 		goto init_dispdrv_failed;

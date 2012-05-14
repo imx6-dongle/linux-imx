@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All Rights Reserved.
  */
 
 /*
@@ -109,6 +109,8 @@ static int imx_bt_rfkill_probe(struct platform_device *dev)
 		goto error_rfk_alloc;
 	}
 
+	rfkill_set_led_trigger_name(rfk, "mxc_bt");
+
 	rc = rfkill_register(rfk);
 	if (rc)
 		goto error_rfkill;
@@ -141,7 +143,7 @@ static int __devexit imx_bt_rfkill_remove(struct platform_device *dev)
 	return 0;
 }
 
-static struct platform_driver imx_bt_rfkill_drv = {
+static struct platform_driver imx_bt_rfkill_driver = {
 	.driver = {
 		.name = "imx_bt_rfkill",
 	},
@@ -152,14 +154,14 @@ static struct platform_driver imx_bt_rfkill_drv = {
 
 static int __init imx_bt_rfkill_init(void)
 {
-	return platform_driver_register(&imx_bt_rfkill_drv);
+	return platform_driver_register(&imx_bt_rfkill_driver);
 }
 
 module_init(imx_bt_rfkill_init);
 
 static void __exit imx_bt_rfkill_exit(void)
 {
-	platform_driver_unregister(&imx_bt_rfkill_drv);
+	platform_driver_unregister(&imx_bt_rfkill_driver);
 }
 
 module_exit(imx_bt_rfkill_exit);

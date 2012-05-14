@@ -34,6 +34,7 @@
 #define PMEM_MIN_ALLOC PAGE_SIZE
 
 #define PMEM_DEBUG 1
+#define PMEM_VADDR_SUPPORT
 
 /* indicates that a refernce to this file has been taken via get_pmem_file,
  * the file should not be released until put_pmem_file is called */
@@ -1307,8 +1308,10 @@ int pmem_setup(struct android_pmem_platform_data *pdata,
 			    &debug_fops);
 #endif
 	return 0;
+#ifdef PMEM_VADDR_SUPPORT
 error_cant_remap:
 	kfree(pmem[id].bitmap);
+#endif
 err_no_mem_for_metadata:
 	misc_deregister(&pmem[id].dev);
 err_cant_register_device:

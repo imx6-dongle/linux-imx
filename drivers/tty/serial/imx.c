@@ -1767,6 +1767,7 @@ static int __init imx_serial_init(void)
 	if (ret != 0)
 		uart_unregister_driver(&imx_reg);
 
+	printk(KERN_INFO "Serial: IMX driver done\n");
 	return 0;
 }
 

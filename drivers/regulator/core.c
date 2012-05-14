@@ -777,7 +777,7 @@ static void print_constraints(struct regulator_dev *rdev)
 	if (constraints->valid_modes_mask & REGULATOR_MODE_STANDBY)
 		count += sprintf(buf + count, "standby");
 
-	rdev_info(rdev, "%s\n", buf);
+	rdev_dbg(rdev, "%s\n", buf);
 }
 
 static int machine_constraints_voltage(struct regulator_dev *rdev,
@@ -1155,6 +1155,12 @@ static struct regulator *_regulator_get(struct device *dev, const char *id,
 
 		if (strcmp(map->supply, id) == 0) {
 			rdev = map->regulator;
+			goto found;
+		}
+	}
+
+	list_for_each_entry(rdev, &regulator_list, list) {
+		if (strcmp(rdev->desc->name, id) == 0) {
 			goto found;
 		}
 	}

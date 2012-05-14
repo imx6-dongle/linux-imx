@@ -1044,9 +1044,9 @@ static int check_task(struct ipu_task_entry *t)
 		t->output.crop.h = tmp;
 	}
 
+	/* if mode is NULL, then allow blit copy using image converter */
 	if (t->set.mode == NULL_MODE) {
-		ret = IPU_CHECK_ERR_PROC_NO_NEED;
-		goto done;
+		t->set.mode |= IC_MODE;
 	}
 
 	if ((t->set.i_uoff % 8) || (t->set.i_voff % 8))
@@ -2985,7 +2985,7 @@ static int ipu_task_thread(void *argv)
 	};
 	int ret;
 	int curr_thread_id;
-	uint32_t size;
+	uint32_t size = 0;
 	unsigned long flags;
 	unsigned int cpu;
 	struct cpumask cpu_mask;

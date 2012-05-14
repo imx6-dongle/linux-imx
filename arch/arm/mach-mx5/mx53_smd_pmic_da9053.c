@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2011 Freescale Semiconductor, Inc. All Rights Reserved.
+ * Copyright (C) 2010-2012 Freescale Semiconductor, Inc. All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@
 #include <mach/iomux-mx53.h>
 #include <mach/gpio.h>
 
-#define DA9052_LDO(max, min, rname, suspend_mv) \
+#define DA9052_LDO(max, min, rname, suspend_mv, num_consumers, consumers) \
 {\
 	.constraints = {\
 		.name		= (rname), \
@@ -55,46 +55,56 @@
 			.disabled = 0, \
 		}, \
 	},\
+	.num_consumer_supplies = (num_consumers), \
+	.consumer_supplies = (consumers), \
 }
 
-/* currently the suspend_mv field here takes no effects for DA9053
+/* CPU */
+static struct regulator_consumer_supply sw1_consumers[] = {
+	{
+		.supply = "cpu_vddgp",
+	}
+};
+
+/* currently the suspend_mv here takes no effects for DA9053
 preset-voltage have to be done in the latest stage during
 suspend*/
 static struct regulator_init_data da9052_regulators_init[] = {
 	DA9052_LDO(DA9052_LDO1_VOLT_UPPER,
-		DA9052_LDO1_VOLT_LOWER, "DA9052_LDO1", 1300),
+		DA9052_LDO1_VOLT_LOWER, "DA9052_LDO1", 1300, 0, NULL),
 	DA9052_LDO(DA9052_LDO2_VOLT_UPPER,
-		DA9052_LDO2_VOLT_LOWER, "DA9052_LDO2", 1300),
+		DA9052_LDO2_VOLT_LOWER, "DA9052_LDO2", 1300, 0, NULL),
 	DA9052_LDO(DA9052_LDO34_VOLT_UPPER,
-		DA9052_LDO34_VOLT_LOWER, "DA9052_LDO3", 3300),
+		DA9052_LDO34_VOLT_LOWER, "DA9052_LDO3", 3300, 0, NULL),
 	DA9052_LDO(DA9052_LDO34_VOLT_UPPER,
-		DA9052_LDO34_VOLT_LOWER, "DA9052_LDO4", 2775),
+		DA9052_LDO34_VOLT_LOWER, "DA9052_LDO4", 2775, 0, NULL),
 	DA9052_LDO(DA9052_LDO567810_VOLT_UPPER,
-		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO5", 1300),
+		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO5", 1300, 0, NULL),
 	DA9052_LDO(DA9052_LDO567810_VOLT_UPPER,
-		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO6", 1200),
+		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO6", 1200, 0, NULL),
 	DA9052_LDO(DA9052_LDO567810_VOLT_UPPER,
-		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO7", 2750),
+		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO7", 2750, 0, NULL),
 	DA9052_LDO(DA9052_LDO567810_VOLT_UPPER,
-		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO8", 1800),
+		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO8", 1800, 0, NULL),
 	DA9052_LDO(DA9052_LDO9_VOLT_UPPER,
-		DA9052_LDO9_VOLT_LOWER, "DA9052_LDO9", 2500),
+		DA9052_LDO9_VOLT_LOWER, "DA9052_LDO9", 2500, 0, NULL),
 	DA9052_LDO(DA9052_LDO567810_VOLT_UPPER,
-		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO10", 1200),
+		DA9052_LDO567810_VOLT_LOWER, "DA9052_LDO10", 1200, 0, NULL),
 
 	/* BUCKS */
 	DA9052_LDO(DA9052_BUCK_CORE_PRO_VOLT_UPPER,
-		DA9052_BUCK_CORE_PRO_VOLT_LOWER, "DA9052_BUCK_CORE", 850),
+		DA9052_BUCK_CORE_PRO_VOLT_LOWER, "DA9052_BUCK_CORE", 850,
+		ARRAY_SIZE(sw1_consumers), sw1_consumers),
 	DA9052_LDO(DA9052_BUCK_CORE_PRO_VOLT_UPPER,
-		DA9052_BUCK_CORE_PRO_VOLT_LOWER, "DA9052_BUCK_PRO", 950),
+		DA9052_BUCK_CORE_PRO_VOLT_LOWER, "DA9052_BUCK_PRO", 950,
+		0, NULL),
 	DA9052_LDO(DA9052_BUCK_MEM_VOLT_UPPER,
-		DA9052_BUCK_MEM_VOLT_LOWER, "DA9052_BUCK_MEM", 1500),
+		DA9052_BUCK_MEM_VOLT_LOWER, "DA9052_BUCK_MEM", 1500, 0, NULL),
 	DA9052_LDO(DA9052_BUCK_PERI_VOLT_UPPER,
-		DA9052_BUCK_PERI_VOLT_LOWER, "DA9052_BUCK_PERI", 2500)
+		DA9052_BUCK_PERI_VOLT_LOWER, "DA9052_BUCK_PERI", 2500, 0, NULL)
 };
 
-
-#define MX53_SMD_WiFi_BT_PWR_EN		(2*32 + 10)	/*GPIO_3_10 */
+#define MX53_SMD_WiFi_BT_PWR_EN		IMX_GPIO_NR(3, 10)	/*GPIO_3_10 */
 struct regulator_init_data wifi_bt_reg_initdata = {
 	.constraints = {
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
@@ -123,6 +133,7 @@ static struct platform_device wifi_bt_reg_device = {
 static struct regulator_consumer_supply sgtl5000_consumer[] = {
 	REGULATOR_SUPPLY("VDDA", NULL),
 	REGULATOR_SUPPLY("VDDIO", NULL),
+	REGULATOR_SUPPLY("VDDD", NULL),
 };
 
 static struct regulator_init_data sgtl5000_reg_initdata = {
@@ -178,6 +189,25 @@ static struct da9052_leds_platform_data da9052_gpio_leds = {
 	.led = da9052_gpio_led,
 };
 
+
+static struct da9052_bat_platform_data da9052_bat = {
+	.sw_temp_control_en = 0,
+	.monitoring_interval = 500,
+	.sw_bat_temp_threshold = 60,
+	.sw_junc_temp_threshold = 120,
+	.hysteresis_window_size = 1,
+	.current_monitoring_window = 10,
+	.bat_with_no_resistor = 62,
+	.bat_capacity_limit_low = 4,
+	.bat_capacity_full = 100,
+	.bat_capacity_limit_high = 70,
+	.chg_hysteresis_const = 89,
+	.hysteresis_reading_interval = 1000,
+	.hysteresis_no_of_reading = 10,
+	.filter_size = 4,
+	.bat_volt_cutoff = 2800,
+	.vbat_first_valid_detect_iteration = 3,
+};
 
 static void da9052_init_ssc_cache(struct da9052 *da9052)
 {
@@ -280,7 +310,7 @@ static int __init smd_da9052_init(struct da9052 *da9052)
 	/* s3c_gpio_setpull(DA9052_IRQ_PIN, S3C_GPIO_PULL_UP);*/
 	int ret;
 	/* Set interrupt as LOW LEVEL interrupt source */
-	set_irq_type(gpio_to_irq(MX53_SMD_DA9052_IRQ), IRQF_TRIGGER_LOW);
+	irq_set_irq_type(gpio_to_irq(MX53_SMD_DA9052_IRQ), IRQF_TRIGGER_LOW);
 
 	da9052_init_ssc_cache(da9052);
 #ifdef CONFIG_SND_SOC_SGTL5000
@@ -297,7 +327,7 @@ static struct da9052_platform_data __initdata da9052_plat = {
 	.regulators = da9052_regulators_init,
 	.led_data = &da9052_gpio_leds,
 	.tsi_data = &da9052_tsi,
-	/* .bat_data = &da9052_bat, */
+	.bat_data = &da9052_bat,
 	/* .gpio_base = GPIO_BOARD_START, */
 };
 
