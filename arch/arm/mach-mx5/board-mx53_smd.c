@@ -717,15 +717,6 @@ static struct android_pmem_platform_data android_pmem_gpu_data = {
 	.cached = 1,
 };
 
-static int p1003_ts_hw_status(void)
-{
-	return gpio_get_value(MX53_SMD_CAP_TCH_INT1);
-}
-
-static struct p1003_ts_platform_data p1003_ts_data = {
-	.hw_status = p1003_ts_hw_status,
-};
-
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
 	{
 	.type = "sii902x",
@@ -737,7 +728,6 @@ static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
 	.type = "p1003_fwv33",
 	.addr = 0x41,
 	.irq  = gpio_to_irq(MX53_SMD_CAP_TCH_INT1),
-	.platform_data = &p1003_ts_data,
 	},
 	{
 	.type = "egalax_ts",
