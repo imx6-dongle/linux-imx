@@ -1135,6 +1135,15 @@ static void __init fixup_mxc_board(struct machine_desc *desc, struct tag *tags,
 
 static void mx53_smd_power_off(void)
 {
+	/* Drive DCDC5V_BB_EN low to disable LVDS0/1 power */
+	gpio_direction_output(MX53_SMD_DCDC5V_BB_EN, 0);
+	/* Drive DCDC1V8_BB_EN low to disable 1V8 voltage */
+	gpio_direction_output(MX53_SMD_DCDC1V8_EN, 0);
+
+	/* Disable the Audio AMP to avoid noise after shutdown */
+	gpio_request(MX53_SMD_AUD_AMP_STBY_B, "amp-standby");
+	gpio_direction_output(MX53_SMD_AUD_AMP_STBY_B, 0);
+
 	/* power off by sending shutdown command to da9053*/
 	da9053_power_off();
 }
@@ -1163,6 +1172,10 @@ static void __init mx53_smd_board_init(void)
 	gpio_request(MX53_SMD_DCDC1V8_EN, "dcdc1v8-en");
 	gpio_direction_output(MX53_SMD_DCDC1V8_EN, 1);
 	gpio_set_value(MX53_SMD_DCDC1V8_EN, 1);
+
+	/* Enable MX53_SMD_DCDC5V_EN */
+	gpio_request(MX53_SMD_DCDC5V_BB_EN, "dcdc5v_bb_en");
+	gpio_direction_output(MX53_SMD_DCDC5V_BB_EN, 1);
 
 	/* Sii902x HDMI controller */
 	gpio_request(MX53_SMD_HDMI_RESET_B, "disp0-pwr-en");
