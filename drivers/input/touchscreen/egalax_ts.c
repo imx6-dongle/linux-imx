@@ -54,7 +54,7 @@
 /* Multiple Touch Mode */
 #define REPORT_MODE_MTTOUCH		0x4
 
-#define MAX_SUPPORT_POINTS		5
+#define MAX_SUPPORT_POINTS		2
 
 #define EVENT_VALID_OFFSET	7
 #define EVENT_VALID_MASK	(0x1 << EVENT_VALID_OFFSET)
@@ -67,11 +67,17 @@
 
 #define EGALAX_MAX_X	32760
 #define EGALAX_MAX_Y	32760
+#define EGALAX_MAX_Z	2048
 #define EGALAX_MAX_TRIES 100
 
 struct egalax_ts {
 	struct i2c_client		*client;
 	struct input_dev		*input_dev;
+	int				old_x;
+	int				old_y;
+	int				old_z;
+	int				old_id;
+	int				old_state;
 #ifdef CONFIG_EARLYSUSPEND
 	struct early_suspend		es_handler;
 #endif
@@ -89,6 +95,7 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 	u8 state;
 
 	do {
+		memset(buf, 0, MAX_I2C_DATA_LEN);
 		do {
 			ret = i2c_master_recv(client, buf, MAX_I2C_DATA_LEN);
 		} while (ret == -EAGAIN && tries++ < EGALAX_MAX_TRIES);
@@ -110,7 +117,18 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 		id = (state & EVENT_ID_MASK) >> EVENT_ID_OFFSET;
 		down = state & EVENT_DOWN_UP;
 
-		if (!valid || id > MAX_SUPPORT_POINTS) {
+		if (x == data->old_x && y == data->old_y && z == data->old_z
+			&& id == data->old_id && down == data->old_state) {
+			continue;
+		} else {
+			data->old_x = x;
+			data->old_y = y;
+			data->old_z = z;
+			data->old_id = id;
+			data->old_state = down;
+		}
+
+		if (!valid || id >= MAX_SUPPORT_POINTS) {
 			dev_dbg(&client->dev, "point invalid\n");
 			return IRQ_HANDLED;
 		}
@@ -118,17 +136,20 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 		input_mt_slot(input_dev, id);
 		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, down);
 
-		dev_dbg(&client->dev, "%s id:%d x:%d y:%d z:%d",
+		dev_dbg(&client->dev, "%s id:%d x:%d y:%d z:%d\n",
 			(down ? "down" : "up"), id, x, y, z);
 
 		if (down) {
+			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, 1);
 			input_report_abs(input_dev, ABS_MT_POSITION_X, x);
 			input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
 			input_report_abs(input_dev, ABS_MT_PRESSURE, z);
+		} else {
+			input_report_abs(input_dev, ABS_MT_PRESSURE, 0);
 		}
-
-		input_mt_report_pointer_emulation(input_dev, true);
+		input_report_key(input_dev, BTN_TOUCH, !!down);
 		input_sync(input_dev);
+
 	} while (gpio_get_value(irq_to_gpio(client->irq)) == 0);
 
 	return IRQ_HANDLED;
@@ -138,7 +159,8 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 static int egalax_wake_up_device(struct i2c_client *client)
 {
 	int gpio = irq_to_gpio(client->irq);
-	int ret;
+	u8 buf[MAX_I2C_DATA_LEN];
+	int ret, tries = 0;
 
 	ret = gpio_request(gpio, "egalax_irq");
 	if (ret < 0) {
@@ -148,11 +170,17 @@ static int egalax_wake_up_device(struct i2c_client *client)
 	}
 	/* wake up controller via an falling edge on IRQ gpio. */
 	gpio_direction_output(gpio, 1);
-	gpio_direction_output(gpio, 0);
+	gpio_set_value(gpio, 0);
 	gpio_set_value(gpio, 1);
 	/* controller should be waken up, return irq.  */
 	gpio_direction_input(gpio);
 	gpio_free(gpio);
+
+	/* If the touch controller has some data pending, read it */
+	/* or the INT line will remian low */
+	while ((gpio_get_value(gpio) == 0) && (tries++ < EGALAX_MAX_TRIES))
+		i2c_master_recv(client, buf, MAX_I2C_DATA_LEN);
+
 	return 0;
 }
 
@@ -209,6 +237,7 @@ static int __devinit egalax_ts_probe(struct i2c_client *client,
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = &client->dev;
 
+	__set_bit(EV_SYN, input_dev->evbit);
 	__set_bit(EV_ABS, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(BTN_TOUCH, input_dev->keybit);
@@ -219,13 +248,16 @@ static int __devinit egalax_ts_probe(struct i2c_client *client,
 			     ABS_MT_POSITION_X, 0, EGALAX_MAX_X, 0, 0);
 	input_set_abs_params(input_dev,
 			     ABS_MT_POSITION_Y, 0, EGALAX_MAX_Y, 0, 0);
+	input_set_abs_params(input_dev,
+			     ABS_MT_PRESSURE, 0, EGALAX_MAX_Z, 0, 0);
+	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, 1, 0, 0);
 	input_mt_init_slots(input_dev, MAX_SUPPORT_POINTS);
 
 	input_set_drvdata(input_dev, data);
 
 	ret = request_threaded_irq(client->irq, NULL, egalax_ts_interrupt,
-				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
-				   "egalax_ts", data);
+					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+					"egalax_ts", data);
 	if (ret < 0) {
 		dev_err(&client->dev, "Failed to register interrupt\n");
 		goto err_free_dev;
