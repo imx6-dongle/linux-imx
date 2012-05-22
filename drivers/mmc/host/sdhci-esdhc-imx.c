@@ -442,8 +442,9 @@ static void esdhc_writew_le(struct sdhci_host *host, u16 val, int reg)
 
 		return;
 	case SDHCI_COMMAND:
-		if ((host->cmd->opcode == MMC_STOP_TRANSMISSION)
-			&& (imx_data->flags & ESDHC_FLAG_MULTIBLK_NO_INT))
+		if ((host->cmd->opcode == MMC_STOP_TRANSMISSION ||
+		     host->cmd->opcode == MMC_SET_BLOCK_COUNT) &&
+		    (imx_data->flags & ESDHC_FLAG_MULTIBLK_NO_INT))
 			val |= SDHCI_CMD_ABORTCMD;
 
 		writel(0x08800880, host->ioaddr + SDHCI_CAPABILITIES_1);
@@ -665,9 +666,6 @@ static irqreturn_t cd_irq(int irq, void *data)
 		imx_data->scratchpad &= ~SDHCI_MIX_CTRL_SMPCLK_SEL;
 	}
 
-	esdhc_reset(sdhost);
-	mdelay(1);
-
 	tasklet_schedule(&sdhost->card_tasklet);
 	return IRQ_HANDLED;
 };
@@ -707,11 +705,6 @@ static int esdhc_pltfm_init(struct sdhci_host *host, struct sdhci_pltfm_data *pd
 
 	if (cpu_is_mx6())
 		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23;
-
-	if(cpu_is_mx53()) {
-		host->quirks |= SDHCI_QUIRK_MULTIBLOCK_READ_ACMD12;
-		host->quirks2 |= SDHCI_QUIRK_BROKEN_AUTO_CMD23;
-	}
 
 	/* write_protect can't be routed to controller, use gpio */
 	sdhci_esdhc_ops.get_ro = esdhc_pltfm_get_ro;
