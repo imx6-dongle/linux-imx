@@ -70,23 +70,53 @@
 #define EGALAX_MAX_Z	2048
 #define EGALAX_MAX_TRIES 100
 
+struct finger_info {
+	s16	x;
+	s16	y;
+	s16	z;
+};
+
 struct egalax_ts {
 	struct i2c_client		*client;
 	struct input_dev		*input_dev;
-	int				old_x;
-	int				old_y;
-	int				old_z;
-	int				old_id;
-	int				old_state;
 #ifdef CONFIG_EARLYSUSPEND
 	struct early_suspend		es_handler;
 #endif
+	u32				finger_mask;
+	struct finger_info		fingers[MAX_SUPPORT_POINTS];
 };
+
+static void report_input_data(struct egalax_ts *data)
+{
+	int i;
+	int num_fingers_down;
+
+	num_fingers_down = 0;
+	for (i = 0; i < MAX_SUPPORT_POINTS; i++) {
+		if (data->fingers[i].z == -1)
+			continue;
+
+		input_report_abs(data->input_dev, ABS_MT_POSITION_X,
+					data->fingers[i].x);
+		input_report_abs(data->input_dev, ABS_MT_POSITION_Y,
+					data->fingers[i].y);
+		input_report_abs(data->input_dev, ABS_MT_PRESSURE,
+					data->fingers[i].z);
+		input_report_abs(data->input_dev, ABS_MT_TOUCH_MAJOR, 1);
+		input_report_abs(data->input_dev, ABS_MT_TRACKING_ID, i);
+		input_mt_sync(data->input_dev);
+		num_fingers_down++;
+	}
+	data->finger_mask = 0;
+
+	if (num_fingers_down == 0)
+		input_mt_sync(data->input_dev);
+	input_sync(data->input_dev);
+}
 
 static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 {
 	struct egalax_ts *data = dev_id;
-	struct input_dev *input_dev = data->input_dev;
 	struct i2c_client *client = data->client;
 	u8 buf[MAX_I2C_DATA_LEN];
 	int id, ret, x, y, z;
@@ -117,40 +147,31 @@ static irqreturn_t egalax_ts_interrupt(int irq, void *dev_id)
 		id = (state & EVENT_ID_MASK) >> EVENT_ID_OFFSET;
 		down = state & EVENT_DOWN_UP;
 
-		if (x == data->old_x && y == data->old_y && z == data->old_z
-			&& id == data->old_id && down == data->old_state) {
-			continue;
-		} else {
-			data->old_x = x;
-			data->old_y = y;
-			data->old_z = z;
-			data->old_id = id;
-			data->old_state = down;
-		}
-
 		if (!valid || id >= MAX_SUPPORT_POINTS) {
 			dev_dbg(&client->dev, "point invalid\n");
 			return IRQ_HANDLED;
 		}
 
-		input_mt_slot(input_dev, id);
-		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, down);
+		if (data->finger_mask & (1U << id))
+			report_input_data(data);
+
+		if (!down) {
+			data->fingers[id].z = -1;
+			data->finger_mask |= 1U << id;
+		} else {
+			data->fingers[id].x = x;
+			data->fingers[id].y = y;
+			data->fingers[id].z = z;
+			data->finger_mask |= 1U << id;
+		}
 
 		dev_dbg(&client->dev, "%s id:%d x:%d y:%d z:%d\n",
 			(down ? "down" : "up"), id, x, y, z);
 
-		if (down) {
-			input_report_abs(input_dev, ABS_MT_TOUCH_MAJOR, 1);
-			input_report_abs(input_dev, ABS_MT_POSITION_X, x);
-			input_report_abs(input_dev, ABS_MT_POSITION_Y, y);
-			input_report_abs(input_dev, ABS_MT_PRESSURE, z);
-		} else {
-			input_report_abs(input_dev, ABS_MT_PRESSURE, 0);
-		}
-		input_report_key(input_dev, BTN_TOUCH, !!down);
-		input_sync(input_dev);
-
 	} while (gpio_get_value(irq_to_gpio(client->irq)) == 0);
+
+	if (data->finger_mask)
+		report_input_data(data);
 
 	return IRQ_HANDLED;
 }
@@ -237,13 +258,8 @@ static int __devinit egalax_ts_probe(struct i2c_client *client,
 	input_dev->id.bustype = BUS_I2C;
 	input_dev->dev.parent = &client->dev;
 
-	__set_bit(EV_SYN, input_dev->evbit);
 	__set_bit(EV_ABS, input_dev->evbit);
-	__set_bit(EV_KEY, input_dev->evbit);
-	__set_bit(BTN_TOUCH, input_dev->keybit);
 
-	input_set_abs_params(input_dev, ABS_X, 0, EGALAX_MAX_X, 0, 0);
-	input_set_abs_params(input_dev, ABS_Y, 0, EGALAX_MAX_Y, 0, 0);
 	input_set_abs_params(input_dev,
 			     ABS_MT_POSITION_X, 0, EGALAX_MAX_X, 0, 0);
 	input_set_abs_params(input_dev,
@@ -251,7 +267,8 @@ static int __devinit egalax_ts_probe(struct i2c_client *client,
 	input_set_abs_params(input_dev,
 			     ABS_MT_PRESSURE, 0, EGALAX_MAX_Z, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR, 0, 1, 0, 0);
-	input_mt_init_slots(input_dev, MAX_SUPPORT_POINTS);
+	input_set_abs_params(input_dev, ABS_MT_TRACKING_ID, 0,
+					MAX_SUPPORT_POINTS-1, 0, 0);
 
 	input_set_drvdata(input_dev, data);
 
