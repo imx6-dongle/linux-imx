@@ -74,9 +74,9 @@ extern const struct imx_srtc_data imx53_imx_srtc_data __initconst;
 	platform_device_register_resndata(NULL, "mxc_v4l2_output",\
 			id, NULL, 0, NULL, 0);
 
-#define imx53_add_v4l2_capture(id)	\
+#define imx53_add_v4l2_capture(id, pdata)	\
 	platform_device_register_resndata(NULL, "mxc_v4l2_capture",\
-			id, NULL, 0, NULL, 0);
+			id, NULL, 0, pdata, sizeof(*pdata));
 
 extern const struct imx_ahci_data imx53_ahci_data[] __initconst;
 #define imx53_add_ahci(id, pdata)		\

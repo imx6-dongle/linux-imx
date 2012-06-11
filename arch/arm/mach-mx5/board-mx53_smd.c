@@ -555,7 +555,15 @@ static struct fsl_mxc_camera_platform_data camera_data = {
 	.analog_regulator = "DA9052_LDO7",
 	.core_regulator = "DA9052_LDO9",
 	.mclk = 24000000,
+	.mclk_source = 0,
 	.csi = 0,
+};
+
+static struct fsl_mxc_capture_platform_data capture_data = {
+	.csi = 0,
+	.ipu = 0,
+	.mclk_source = 0,
+	.is_mipi = 0,
 };
 
 static struct fsl_mxc_lightsensor_platform_data ls_data = {
@@ -1245,7 +1253,7 @@ static void __init mx53_smd_board_init(void)
 		imx53_add_vpu();
 	imx53_add_ldb(&ldb_data);
 	imx53_add_v4l2_output(0);
-	imx53_add_v4l2_capture(0);
+	imx53_add_v4l2_capture(0, &capture_data);
 	imx53_add_mxc_pwm(1);
 	imx53_add_mxc_pwm_backlight(0, &mxc_pwm_backlight_data);
 
