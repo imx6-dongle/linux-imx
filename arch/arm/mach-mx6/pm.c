@@ -235,8 +235,14 @@ static void gpu_power_up(void)
 	udelay(10);
 }
 
+/*
+ * For safety, DO NOT define ENABLE_DISP_POWER_GATING for MX6SL EVK.
+ * Otherwise will meet PxP processing timeout When run EPDC unit test.
+ * The cause is under investigation.
+ */
 static void disp_power_down(void)
 {
+#ifdef	ENABLE_DISP_POWER_GATING
 	if (cpu_is_mx6sl()) {
 		__raw_writel(0xFFFFFFFF, gpc_base + GPC_PGC_DISP_PUPSCR_OFFSET);
 		__raw_writel(0xFFFFFFFF, gpc_base + GPC_PGC_DISP_PDNSCR_OFFSET);
@@ -244,15 +250,18 @@ static void disp_power_down(void)
 		__raw_writel(0x1, gpc_base + GPC_PGC_DISP_PGCR_OFFSET);
 		__raw_writel(0x10, gpc_base + GPC_CNTR_OFFSET);
 	}
+#endif
 }
 
 static void disp_power_up(void)
 {
+#ifdef	ENABLE_DISP_POWER_GATING
 	if (cpu_is_mx6sl()) {
 		__raw_writel(0x0, gpc_base + GPC_PGC_DISP_PGCR_OFFSET);
 		__raw_writel(0x20, gpc_base + GPC_CNTR_OFFSET);
 		__raw_writel(0x1, gpc_base + GPC_PGC_DISP_SR_OFFSET);
 	}
+#endif
 }
 
 static void mx6_suspend_store(void)
