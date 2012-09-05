@@ -57,6 +57,7 @@ cpufreq, it minor 1, and when we promote cpufreq, it add 1, so
 if it is 0, mean we didn't change the cpufreq */
 static int cpufreq_change_count;
 
+extern int thermal_hot;
 int anatop_thermal_get_cpufreq_cur(void)
 {
 	int ret = -EINVAL;
@@ -177,6 +178,7 @@ int anatop_thermal_cpu_hotplug(bool cpu_on)
 					sys_write(fd, (char *)"1", MAX_CPU_ONLINE_LEN);
 					cpu_mask &= ~(0x1 << cpu);
 					ret = 0;
+					sys_close(fd);
 					break;
 				}
 				sys_close(fd);
@@ -198,6 +200,7 @@ int anatop_thermal_cpu_hotplug(bool cpu_on)
 					sys_write(fd, (char *)"0", MAX_CPU_ONLINE_LEN);
 					cpu_mask |= 0x1 << cpu;
 					ret = 0;
+					sys_close(fd);
 					break;
 				}
 				sys_close(fd);
@@ -235,6 +238,7 @@ imx_processor_set_cur_state(struct thermal_cooling_device *cdev,
 	secondary CPUs that detached by thermal driver */
 	if (cooling_cpuhotplug) {
 		if (!state) {
+			thermal_hot = 0;
 			for (i = 1; i < 4; i++) {
 				if (cpu_mask && (0x1 << i)) {
 					anatop_thermal_cpu_hotplug(true);
@@ -245,6 +249,7 @@ imx_processor_set_cur_state(struct thermal_cooling_device *cdev,
 		}
 	} else {
 		if (!state) {
+			thermal_hot = 0;
 			if (cpufreq_change_count < 0)
 				anatop_thermal_cpufreq_up();
 			else if (cpufreq_change_count > 0)

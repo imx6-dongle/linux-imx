@@ -158,10 +158,6 @@ extern const struct imx_imx_asrc_data imx6q_imx_asrc_data[] __initconst;
 #define imx6q_add_asrc(pdata)	\
 	imx_add_imx_asrc(imx6q_imx_asrc_data, pdata)
 
-extern const struct imx_spi_imx_data imx6q_ecspi_data[] __initconst;
-#define imx6q_add_ecspi(id, pdata)      \
-	imx_add_spi_imx(&imx6q_ecspi_data[id], pdata)
-
 extern const struct imx_dvfs_core_data imx6q_dvfs_core_data __initconst;
 #define imx6q_add_dvfs_core(pdata)	\
 	imx_add_dvfs_core(&imx6q_dvfs_core_data, pdata)
@@ -219,6 +215,9 @@ extern const struct imx_pxp_data imx6dl_pxp_data __initconst;
 
 #define imx6dl_add_imx_pxp_client()   \
 	imx_add_imx_pxp_client()
+
+#define imx6sl_add_imx_pxp_v4l2()   \
+	imx_add_imx_pxp_v4l2()
 
 extern const struct imx_epdc_data imx6dl_epdc_data __initconst;
 #define imx6dl_add_imx_epdc(pdata)	\

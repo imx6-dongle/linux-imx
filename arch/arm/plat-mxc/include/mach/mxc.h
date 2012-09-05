@@ -94,6 +94,8 @@ extern unsigned int system_rev;
 	board_is_rev(IMX_BOARD_REV_2))
 #define board_is_mx6q_sabre_auto() (cpu_is_mx6q() && \
 	board_is_rev(IMX_BOARD_REV_3))
+#define board_is_mx6sl_evk() (cpu_is_mx6sl() && \
+	board_is_rev(IMX_BOARD_REV_3))
 
 #define board_is_mx6_unknown() \
 	board_is_rev(IMX_BOARD_REV_1)
@@ -247,6 +249,7 @@ extern unsigned int __mxc_cpu_type;
 struct cpu_op {
 	u32 pll_reg;
 	u32 pll_rate;
+	u32 pll_lpm_rate;
 	u32 cpu_rate;
 	u32 pdr0_reg;
 	u32 pdf;
