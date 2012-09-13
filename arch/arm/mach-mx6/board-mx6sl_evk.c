@@ -1235,8 +1235,8 @@ static void __init mx6_evk_init(void)
 	imx6_init_fec(fec_data);
 
 	platform_device_register(&evk_vmmc_reg_devices);
-	imx6q_add_sdhci_usdhc_imx(0, &mx6_evk_sd1_data);
 	imx6q_add_sdhci_usdhc_imx(1, &mx6_evk_sd2_data);
+	imx6q_add_sdhci_usdhc_imx(0, &mx6_evk_sd1_data);
 	imx6q_add_sdhci_usdhc_imx(2, &mx6_evk_sd3_data);
 
 	mx6_evk_init_usb();
