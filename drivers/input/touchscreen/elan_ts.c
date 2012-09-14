@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007-2008 HTC Corporation.
+ * Copyright (C) 2012 Freescale Semiconductor, Inc.
  *
  * This driver is adapted from elan8232_i2c.c written by Shan-Fu Chiou
  * <sfchiou@gmail.com> and Jay Tu <jay_tu@htc.com>.
@@ -28,6 +29,8 @@
 #include <linux/hrtimer.h>
 #include <linux/gpio.h>
 
+#include <linux/earlysuspend.h>
+
 static const char ELAN_TS_NAME[] = "elan-touch";
 
 #define ELAN_TS_X_MAX 		1088
@@ -55,6 +58,9 @@ static struct elan_data {
 	struct i2c_client *client;
 	struct input_dev *input;
 	wait_queue_head_t wait;
+#ifdef CONFIG_EARLYSUSPEND
+	struct early_suspend es_handler;
+#endif
 } elan_touch_data;
 
 /*--------------------------------------------------------------*/
@@ -267,6 +273,12 @@ static int elan_touch_register_interrupt(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_EARLYSUSPEND
+static void elan_early_suspend(struct early_suspend *h);
+static void elan_later_resume(struct early_suspend *h);
+#endif
+
+
 static int elan_touch_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
@@ -328,6 +340,15 @@ static int elan_touch_probe(struct i2c_client *client,
 		goto fail;
 	}
 
+#ifdef CONFIG_EARLYSUSPEND
+	/* register this client's earlysuspend */
+	elan_touch_data.es_handler.level = EARLY_SUSPEND_LEVEL_DISABLE_FB;
+	elan_touch_data.es_handler.suspend = elan_early_suspend;
+	elan_touch_data.es_handler.resume = elan_later_resume;
+	elan_touch_data.es_handler.data = (void *)client;
+	register_early_suspend(&elan_touch_data.es_handler);
+#endif
+
 	elan_touch_register_interrupt(elan_touch_data.client);
 
 	return 0;
@@ -341,6 +362,10 @@ fail:
 
 static int elan_touch_remove(struct i2c_client *client)
 {
+#ifdef CONFIG_EARLYSUSPEND
+	unregister_early_suspend(&elan_touch_data.es_handler);
+#endif
+
 	if (elan_wq)
 		destroy_workqueue(elan_wq);
 
@@ -352,6 +377,28 @@ static int elan_touch_remove(struct i2c_client *client)
 		hrtimer_cancel(&elan_touch_data.timer);
 	return 0;
 }
+
+#ifdef CONFIG_EARLYSUSPEND
+static void elan_early_suspend(struct early_suspend *h)
+{
+}
+
+static void elan_later_resume(struct early_suspend *h)
+{
+	if (0 == elan_touch_detect_int_level()) {
+		pr_debug("elan_ts: got touch in suspend period\n");
+		if (h->data) {
+			/*if touch screen during suspend, recv and drop the
+			  data, then touch interrupt pin will return high after
+			  receving data.
+			*/
+			uint8_t buf_recv[IDX_PACKET_SIZE];
+			elan_touch_recv_data((struct i2c_client *)(h->data),
+					       buf_recv);
+		}
+	}
+}
+#endif
 
 /* -------------------------------------------------------------------- */
 static const struct i2c_device_id elan_touch_id[] = {
