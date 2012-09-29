@@ -172,9 +172,9 @@ static void imx_keypad_fire_events(struct imx_keypad *keypad,
 				continue; /* Row does not contain changes */
 
 			code = MATRIX_SCAN_CODE(row, col, MATRIX_ROW_SHIFT);
-			input_event(input_dev, EV_MSC, MSC_SCAN, code);
+			/* value should be 1 when key pressed, 0 for released */
 			input_report_key(input_dev, keypad->keycodes[code],
-				matrix_volatile_state[col] & (1 << row));
+				     (matrix_volatile_state[col] >> row) & 0x1);
 			dev_dbg(&input_dev->dev, "Event code: %d, val: %d",
 				keypad->keycodes[code],
 				matrix_volatile_state[col] & (1 << row));
@@ -496,7 +496,13 @@ static int __devinit imx_keypad_probe(struct platform_device *pdev)
 	input_dev->dev.parent = &pdev->dev;
 	input_dev->open = imx_keypad_open;
 	input_dev->close = imx_keypad_close;
-	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_REP);
+
+	/* Should not set BIT_MASK(EV_REP) to evbit[0] when some keys(like
+	   power key) in keypad don't require to repeat, otherwise it will
+	   auto repeat the key event if long press those keys. The disadvantage
+	   is all keys in keypad, will not auto repeat when long pressed, but it
+	   should be acceptable to remove the EV_REP flag*/
+	input_dev->evbit[0] = BIT_MASK(EV_KEY);
 	input_dev->keycode = keypad->keycodes;
 	input_dev->keycodesize = sizeof(keypad->keycodes[0]);
 	input_dev->keycodemax = ARRAY_SIZE(keypad->keycodes);
