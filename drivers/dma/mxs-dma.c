@@ -324,6 +324,7 @@ static int mxs_dma_alloc_chan_resources(struct dma_chan *chan)
 	async_tx_ack(&mxs_chan->desc);
 
 	clk_disable_unprepare(mxs_dma->clk);
+
 	return 0;
 
 err_clk:
