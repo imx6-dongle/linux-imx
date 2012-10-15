@@ -1246,18 +1246,21 @@ static struct ipuv3_fb_platform_data sabresd_fb_data[] = {
 	.mode_str = "LDB-XGA",
 	.default_bpp = 32,
 	.int_clk = false,
+	.late_init = false,
 	}, {
 	.disp_dev = "hdmi",
 	.interface_pix_fmt = IPU_PIX_FMT_RGB24,
 	.mode_str = "1920x1080M@60",
 	.default_bpp = 32,
 	.int_clk = false,
+	.late_init = false,
 	}, {
 	.disp_dev = "ldb",
 	.interface_pix_fmt = IPU_PIX_FMT_RGB666,
 	.mode_str = "LDB-XGA",
 	.default_bpp = 32,
 	.int_clk = false,
+	.late_init = false,
 	},
 };
 
@@ -1358,9 +1361,11 @@ static struct imx_ipuv3_platform_data ipu_data[] = {
 	{
 	.rev = 4,
 	.csi_clk[0] = "clko_clk",
+	.bypass_reset = false,
 	}, {
 	.rev = 4,
 	.csi_clk[0] = "clko_clk",
+	.bypass_reset = false,
 	},
 };
 
@@ -1586,7 +1591,7 @@ static void __init imx6q_add_device_buttons(void) {}
 
 static struct platform_pwm_backlight_data mx6_sabresd_pwm_backlight_data = {
 	.pwm_id = 0,
-	.max_brightness = 255,
+	.max_brightness = 248,
 	.dft_brightness = 128,
 	.pwm_period_ns = 50000,
 };
@@ -1731,10 +1736,13 @@ static void __init mx6_sabresd_board_init(void)
 	imx6q_add_mxc_hdmi_core(&hdmi_core_data);
 
 	imx6q_add_ipuv3(0, &ipu_data[0]);
-	if (cpu_is_mx6q())
+	if (cpu_is_mx6q()) {
 		imx6q_add_ipuv3(1, &ipu_data[1]);
-	for (i = 0; i < ARRAY_SIZE(sabresd_fb_data); i++)
-		imx6q_add_ipuv3fb(i, &sabresd_fb_data[i]);
+		for (i = 0; i < 4 && i < ARRAY_SIZE(sabresd_fb_data); i++)
+			imx6q_add_ipuv3fb(i, &sabresd_fb_data[i]);
+	} else
+		for (i = 0; i < 2 && i < ARRAY_SIZE(sabresd_fb_data); i++)
+			imx6q_add_ipuv3fb(i, &sabresd_fb_data[i]);
 
 	imx6q_add_vdoa();
 	imx6q_add_mipi_dsi(&mipi_dsi_pdata);

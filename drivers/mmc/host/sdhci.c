@@ -30,7 +30,7 @@
 #include "sdhci.h"
 
 #define DRIVER_NAME "sdhci"
-#define CLK_TIMEOUT	(10 * HZ)
+#define CLK_TIMEOUT    (10 * HZ)
 
 #define DBG(f, x...) \
 	pr_debug(DRIVER_NAME " [%s()]: " f, __func__,## x)
@@ -85,11 +85,7 @@ static bool sdhci_can_gate_clk(struct sdhci_host *host)
 static void sdhci_enable_clk(struct sdhci_host *host)
 {
 	if (host->clk_mgr_en) {
-		if (!in_interrupt())
-			cancel_delayed_work(&host->clk_worker);
-		else
-			__cancel_delayed_work(&host->clk_worker);
-
+		cancel_delayed_work_sync(&host->clk_worker);
 		if (!host->clk_status && host->ops->platform_clk_ctrl)
 			host->ops->platform_clk_ctrl(host, true);
 	}
@@ -1541,7 +1537,6 @@ static void sdhci_enable_sdio_irq(struct mmc_host *mmc, int enable)
 
 	host = mmc_priv(mmc);
 
-	sdhci_enable_clk(host);
 	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->flags & SDHCI_DEVICE_DEAD)
@@ -2891,11 +2886,6 @@ int sdhci_add_host(struct sdhci_host *host)
 		host->tuning_timer.function = sdhci_tuning_timer;
 	}
 
-	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,
-		mmc_hostname(mmc), host);
-	if (ret)
-		goto untasklet;
-
 	host->vmmc = regulator_get(mmc_dev(mmc), "vmmc");
 	if (IS_ERR(host->vmmc)) {
 		printk(KERN_INFO "%s: no vmmc regulator found\n", mmc_hostname(mmc));
@@ -2905,6 +2895,11 @@ int sdhci_add_host(struct sdhci_host *host)
 	}
 
 	sdhci_init(host, 0);
+
+	ret = request_irq(host->irq, sdhci_irq, IRQF_SHARED,
+		mmc_hostname(mmc), host);
+	if (ret)
+		goto untasklet;
 
 #ifdef CONFIG_MMC_DEBUG
 	sdhci_dumpregs(host);

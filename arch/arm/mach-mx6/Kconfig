@@ -7,6 +7,7 @@ config ARCH_MX6Q
 	select ARCH_MXC_AUDMUX_V2
 	select ARM_GIC
 	select ARCH_HAS_CPUFREQ
+	select OC_ETM
 	select IMX_HAVE_PLATFORM_IMX_UART
 	select IMX_HAVE_PLATFORM_FEC
 	select IMX_HAVE_PLATFORM_IMX_ANATOP_THERMAL
@@ -136,6 +137,7 @@ config MACH_MX6SL_EVK
 	select IMX_HAVE_PLATFORM_IMX_EPDC
 	select IMX_HAVE_PLATFORM_IMX_SPDC
 	select IMX_HAVE_PLATFORM_IMX_PXP
+	select IMX_HAVE_PLATFORM_IMX_FSL_CSI
 	select IMX_HAVE_PLATFORM_IMX_KEYPAD
 	select IMX_HAVE_PLATFORM_IMX_DCP
 	select IMX_HAVE_PLATFORM_RANDOM_RNGC
@@ -267,5 +269,14 @@ config MX6_INTER_LDO_BYPASS
 	 This is choosed for bypass internal LDO in MX6. If choose it, internal
 	 LDO will replaced by external pmic regulator(e.g. pfuze100), VDDCORE
 	 can be adjust automatically adjust by cpu frequency.
+
+config MX6_CLK_FOR_BOOTUI_TRANS
+	bool "MX6 clk setting for smooth UI transtion from bootloader to kernel"
+	depends on MXC_IPU_V3H
+	default n
+	help
+	 This is choosed to keep enable IPU related clocks and PWM clocks and
+	 avoid setting IPU related clocks' parents when initializing clock tree
+	 so that bootloader splashimage can transition to kernel smoothly.
 
 endif

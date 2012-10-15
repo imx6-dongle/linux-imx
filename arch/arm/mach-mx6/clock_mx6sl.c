@@ -1537,16 +1537,6 @@ static struct clk ipg_clk = {
 	.get_rate = _clk_ipg_get_rate,
 };
 
-static struct clk tzasc1_clk = {
-	__INIT_CLK_DEBUG(tzasc1_clk)
-	.id = 0,
-	.parent = &ipg_clk,
-	.enable_reg = MXC_CCM_CCGR2,
-	.enable_shift = MXC_CCM_CCGRx_CG11_OFFSET,
-	.enable = _clk_enable,
-	.disable = _clk_disable_inwait,
-};
-
 static struct clk tzasc2_clk = {
 	__INIT_CLK_DEBUG(tzasc2_clk)
 	.id = 0,
@@ -1574,16 +1564,6 @@ static struct clk mx6per1_clk = {
 	.secondary = &mx6fast1_clk,
 	.enable_reg = MXC_CCM_CCGR4,
 	.enable_shift = MXC_CCM_CCGRx_CG6_OFFSET,
-	.enable = _clk_enable,
-	.disable = _clk_disable_inwait,
-};
-
-static struct clk mx6per2_clk = {
-	__INIT_CLK_DEBUG(mx6per2_clk)
-	.id = 0,
-	.parent = &ahb_clk,
-	.enable_reg = MXC_CCM_CCGR4,
-	.enable_shift = MXC_CCM_CCGRx_CG7_OFFSET,
 	.enable = _clk_enable,
 	.disable = _clk_disable_inwait,
 };
@@ -1709,7 +1689,7 @@ static struct clk mmdc_ch1_axi_clk[] = {
 	.secondary = &tzasc2_clk,
 	},
 };
-
+#if defined(CONFIG_SDMA_IRAM) || defined(CONFIG_SND_MXC_SOC_IRAM)
 static struct clk ocram_clk = {
 	__INIT_CLK_DEBUG(ocram_clk)
 	.id = 0,
@@ -1719,7 +1699,7 @@ static struct clk ocram_clk = {
 	.enable = _clk_enable,
 	.disable = _clk_disable_inwait,
 };
-
+#endif
 static unsigned long _clk_ipg_perclk_get_rate(struct clk *clk)
 {
 	u32 reg, div;
@@ -1808,7 +1788,7 @@ static struct clk sdma_clk[] = {
 	},
 };
 
-static unsigned long mx6_timer_rate()
+static unsigned long mx6_timer_rate(void)
 {
 	u32 parent_rate = clk_get_rate(&osc_clk);
 
@@ -1970,8 +1950,8 @@ static unsigned long _clk_ipu_round_rate(struct clk *clk,
 }
 
 static struct clk ipu1_clk = {
-	__INIT_CLK_DEBUG(ipu1_clk)
-	.parent = &pll2_pfd2_400M,
+	__INIT_CLK_DEBUG(csi_clk)
+	.parent = &osc_clk,
 	.enable_reg = MXC_CCM_CCGR3,
 	.enable_shift = MXC_CCM_CCGRx_CG0_OFFSET,
 	.enable = _clk_enable,
@@ -4090,9 +4070,9 @@ int __init mx6sl_clocks_init(unsigned long ckil, unsigned long osc,
 		     3 << MXC_CCM_CCGRx_CG11_OFFSET, MXC_CCM_CCGR1);
 	__raw_writel(1 << MXC_CCM_CCGRx_CG12_OFFSET |
 		     1 << MXC_CCM_CCGRx_CG11_OFFSET |
-		     1 << MXC_CCM_CCGRx_CG10_OFFSET |
-		     1 << MXC_CCM_CCGRx_CG9_OFFSET |
-		     1 << MXC_CCM_CCGRx_CG8_OFFSET, MXC_CCM_CCGR2);
+		     3 << MXC_CCM_CCGRx_CG10_OFFSET |
+		     3 << MXC_CCM_CCGRx_CG9_OFFSET |
+		     3 << MXC_CCM_CCGRx_CG8_OFFSET, MXC_CCM_CCGR2);
 	__raw_writel(1 << MXC_CCM_CCGRx_CG14_OFFSET |
 		     3 << MXC_CCM_CCGRx_CG13_OFFSET |
 		     3 << MXC_CCM_CCGRx_CG12_OFFSET |

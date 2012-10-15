@@ -122,8 +122,8 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 #define RX_RING_SIZE		(FEC_ENET_RX_FRPPG * FEC_ENET_RX_PAGES)
 #define FEC_ENET_TX_FRSIZE	2048
 #define FEC_ENET_TX_FRPPG	(PAGE_SIZE / FEC_ENET_TX_FRSIZE)
-#define TX_RING_SIZE		16	/* Must be power of two */
-#define TX_RING_MOD_MASK	15	/*   for this to work */
+#define TX_RING_SIZE		128	/* Must be power of two */
+#define TX_RING_MOD_MASK	127	/*   for this to work */
 
 #define BUFDES_SIZE ((RX_RING_SIZE + TX_RING_SIZE) * sizeof(struct bufdesc))
 
@@ -397,7 +397,12 @@ fec_timeout(struct net_device *ndev)
 
 	ndev->stats.tx_errors++;
 
+	netif_device_detach(ndev);
+	fec_stop(ndev);
+
 	fec_restart(ndev, fep->full_duplex);
+	netif_device_attach(ndev);
+	ndev->trans_start = jiffies; /* prevent tx timeout */
 	if (fep->link && !fep->tx_full)
 		netif_wake_queue(ndev);
 }
@@ -1320,10 +1325,7 @@ fec_enet_close(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
 
-	/* Don't know what to do yet. */
 	fep->opened = 0;
-	netif_stop_queue(ndev);
-	netif_carrier_off(ndev);
 	if (fep->use_napi)
 		napi_disable(&fep->napi);
 
@@ -1760,7 +1762,10 @@ fec_stop(struct net_device *dev)
 	if (fep->ptimer_present)
 		fec_ptp_stop(fep->ptp_priv);
 	writel(FEC_DEFAULT_IMASK, fep->hwp + FEC_IMASK);
-	netif_stop_queue(dev);
+
+	if (netif_running(dev))
+		netif_stop_queue(dev);
+	netif_carrier_off(dev);     /* prevent tx timeout */
 	fep->link = 0;
 }
 
@@ -1921,7 +1926,6 @@ fec_suspend(struct device *dev)
 	if (netif_running(ndev)) {
 		netif_device_detach(ndev);
 		fec_stop(ndev);
-		netif_carrier_off(ndev);
 		clk_disable(fep->clk);
 	}
 

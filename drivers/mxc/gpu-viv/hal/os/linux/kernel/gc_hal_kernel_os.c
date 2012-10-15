@@ -197,6 +197,8 @@ typedef struct _gcsSIGNAL
     /* The owner of the signal. */
     gctHANDLE process;
 
+    gckHARDWARE hardware;
+
     /* ID. */
     gctUINT32 id;
 }
@@ -6517,7 +6519,9 @@ gckOS_Broadcast(
 
     case gcvBROADCAST_GPU_STUCK:
         gcmkTRACE_N(gcvLEVEL_ERROR, 0, "gcvBROADCAST_GPU_STUCK\n");
+#if !gcdENABLE_RECOVERY
         gcmkONERROR(_DumpGPUState(Os, Hardware->core));
+#endif
         gcmkONERROR(gckKERNEL_Recovery(Hardware->kernel));
         break;
 
@@ -6943,6 +6947,7 @@ gckOS_SetGPUPower(
     struct clk *clk_vg_axi = Os->device->clk_vg_axi;
 
     gctBOOL oldClockState = gcvFALSE;
+    gctBOOL oldPowerState = gcvFALSE;
 
     gcmkHEADER_ARG("Os=0x%X Core=%d Clock=%d Power=%d", Os, Core, Clock, Power);
 
@@ -6952,15 +6957,20 @@ gckOS_SetGPUPower(
         if (Core == gcvCORE_VG)
         {
             oldClockState = Os->device->kernels[Core]->vg->hardware->clockState;
+            oldPowerState = Os->device->kernels[Core]->vg->hardware->powerState;
         }
         else
         {
 #endif
             oldClockState = Os->device->kernels[Core]->hardware->clockState;
+            oldPowerState = Os->device->kernels[Core]->hardware->powerState;
 #if gcdENABLE_VG
         }
 #endif
     }
+	if((Power == gcvTRUE) && (oldPowerState == gcvFALSE) &&
+		!IS_ERR(Os->device->gpu_regulator))
+            regulator_enable(Os->device->gpu_regulator);
 
     if (Clock == gcvTRUE) {
         if (oldClockState == gcvFALSE) {
@@ -7003,8 +7013,10 @@ gckOS_SetGPUPower(
             }
         }
     }
-
-
+	if((Power == gcvFALSE) && (oldPowerState == gcvTRUE) &&
+		!IS_ERR(Os->device->gpu_regulator))
+            regulator_disable(Os->device->gpu_regulator);
+    /* TODO: Put your code here. */
     gcmkFOOTER_NO();
     return gcvSTATUS_OK;
 }
@@ -7195,6 +7207,7 @@ gckOS_CreateSignal(
     /* Save the process ID. */
     signal->process = (gctHANDLE) _GetProcessID();
     signal->manualReset = ManualReset;
+    signal->hardware = gcvNULL;
     init_completion(&signal->obj);
     atomic_set(&signal->ref, 1);
 
@@ -7212,6 +7225,61 @@ OnError:
     }
 
     gcmkFOOTER_NO();
+    return status;
+}
+
+gceSTATUS
+gckOS_SignalQueryHardware(
+    IN gckOS Os,
+    IN gctSIGNAL Signal,
+    OUT gckHARDWARE * Hardware
+    )
+{
+    gceSTATUS status;
+    gcsSIGNAL_PTR signal;
+
+    gcmkHEADER_ARG("Os=0x%X Signal=0x%X Hardware=0x%X", Os, Signal, Hardware);
+
+    /* Verify the arguments. */
+    gcmkVERIFY_OBJECT(Os, gcvOBJ_OS);
+    gcmkVERIFY_ARGUMENT(Signal != gcvNULL);
+    gcmkVERIFY_ARGUMENT(Hardware != gcvNULL);
+
+    gcmkONERROR(_QueryIntegerId(&Os->signalDB, (gctUINT32)Signal, (gctPOINTER)&signal));
+
+    *Hardware = signal->hardware;
+
+    gcmkFOOTER_NO();
+    return gcvSTATUS_OK;
+OnError:
+    gcmkFOOTER();
+    return status;
+}
+
+gceSTATUS
+gckOS_SignalSetHardware(
+    IN gckOS Os,
+    IN gctSIGNAL Signal,
+    IN gckHARDWARE Hardware
+    )
+{
+    gceSTATUS status;
+    gcsSIGNAL_PTR signal;
+
+    gcmkHEADER_ARG("Os=0x%X Signal=0x%X Hardware=0x%X", Os, Signal, Hardware);
+
+    /* Verify the arguments. */
+    gcmkVERIFY_OBJECT(Os, gcvOBJ_OS);
+    gcmkVERIFY_ARGUMENT(Signal != gcvNULL);
+
+    gcmkONERROR(_QueryIntegerId(&Os->signalDB, (gctUINT32)Signal, (gctPOINTER)&signal));
+
+    signal->hardware = Hardware;
+
+    gcmkFOOTER_NO();
+    return gcvSTATUS_OK;
+OnError:
+    gcmkFOOTER();
     return status;
 }
 
@@ -7330,6 +7398,9 @@ gckOS_Signal(
 
     if (State)
     {
+        /* unbind the signal from hardware. */
+        signal->hardware = gcvNULL;
+
         /* Set the event to a signaled state. */
         complete(&signal->obj);
     }
