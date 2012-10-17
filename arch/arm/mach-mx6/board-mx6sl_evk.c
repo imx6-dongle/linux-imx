@@ -584,13 +584,14 @@ static struct mxc_spdif_platform_data mxc_spdif_data = {
 	.spdif_clk		= NULL,
 };
 
-int hdmi_enabled;
-static int __init hdmi_setup(char *__unused)
-{
-	hdmi_enabled = 1;
-	return 1;
-}
-__setup("hdmi", hdmi_setup);
+
+enum DISPLAY_PANEL_MODE {
+	PANEL_MODE_LCD,
+	PANEL_MODE_HDMI,
+	PANEL_MODE_EINK,
+};
+
+static int display_panel_mode = PANEL_MODE_EINK;
 
 static iomux_v3_cfg_t mx6sl_sii902x_hdmi_pads_enabled[] = {
 	MX6SL_PAD_LCD_RESET__GPIO_2_19,
@@ -689,10 +690,10 @@ static struct imxi2c_platform_data mx6_evk_i2c2_data = {
 
 static struct i2c_board_info mxc_i2c0_board_info[] __initdata = {
 	{
-		I2C_BOARD_INFO("max17135", 0x48),
+		I2C_BOARD_INFO("max17135", 0), /*0x48*/
 		.platform_data = &max17135_pdata,
 	}, {
-		I2C_BOARD_INFO("elan-touch", 0x10),
+		I2C_BOARD_INFO("elan-touch", 0), /*0x10*/
 		.irq = gpio_to_irq(MX6SL_BRD_ELAN_INT),
 	}, {
 		I2C_BOARD_INFO("mma8450", 0x1c),
@@ -705,7 +706,7 @@ static struct i2c_board_info mxc_i2c1_board_info[] __initdata = {
 		.platform_data = &wm8962_config_data,
 	},
 	{
-		I2C_BOARD_INFO("sii902x", 0),
+		I2C_BOARD_INFO("sii902x", 0), /*0x39*/
 		.platform_data = &sii902x_hdmi_data,
 		.irq = gpio_to_irq(MX6SL_BRD_EPDC_PWRCTRL3)
 	},
@@ -1391,8 +1392,6 @@ static void __init mx6_evk_init(void)
 	mxc_iomux_v3_setup_multiple_pads(mx6sl_brd_pads,
 					ARRAY_SIZE(mx6sl_brd_pads));
 
-	elan_ts_init();
-
 #ifdef CONFIG_MX6_INTER_LDO_BYPASS
 	gp_reg_id = mx6sl_evk_dvfscore_data.reg_id;
 	soc_reg_id = mx6sl_evk_dvfscore_data.soc_id;
@@ -1407,22 +1406,52 @@ static void __init mx6_evk_init(void)
 
 	imx6q_add_imx_i2c(0, &mx6_evk_i2c0_data);
 	imx6q_add_imx_i2c(1, &mx6_evk_i2c1_data);
-	i2c_register_board_info(0, mxc_i2c0_board_info,
-			ARRAY_SIZE(mxc_i2c0_board_info));
 
 	/*  setting sii902x address when hdmi enabled */
-	if (hdmi_enabled) {
-		for (i = 0; i < ARRAY_SIZE(mxc_i2c1_board_info); i++) {
-			if (!strcmp(mxc_i2c1_board_info[i].type, "sii902x")) {
+	switch (display_panel_mode) {
+	case PANEL_MODE_EINK:
+		for (i = 0; i < ARRAY_SIZE(mxc_i2c0_board_info); i++)
+			if (!strcmp(mxc_i2c0_board_info[i].type, "max17135"))
+				mxc_i2c0_board_info[i].addr = 0x48;
+		for (i = 0; i < ARRAY_SIZE(mxc_i2c0_board_info); i++)
+			if (!strcmp(mxc_i2c0_board_info[i].type, "elan-touch"))
+				mxc_i2c0_board_info[i].addr = 0x10;
+		elan_ts_init();
+		mxc_register_device(&max17135_sensor_device, NULL);
+		setup_spdc();
+		if (!spdc_sel)
+			imx6dl_add_imx_epdc(&epdc_data);
+		else
+			imx6sl_add_imx_spdc(&spdc_data);
+		break;
+	case PANEL_MODE_HDMI:
+		for (i = 0; i < ARRAY_SIZE(mxc_i2c1_board_info); i++)
+			if (!strcmp(mxc_i2c1_board_info[i].type, "sii902x"))
 				mxc_i2c1_board_info[i].addr = 0x39;
-				break;
-			}
-		}
+		imx6dl_add_imx_elcdif(&hdmi_fb_data[0]);
+		mxc_spdif_data.spdif_core_clk = clk_get_sys("mxc_spdif.0",
+								NULL);
+		clk_put(mxc_spdif_data.spdif_core_clk);
+		imx6q_add_spdif(&mxc_spdif_data);
+		imx6q_add_spdif_dai();
+		imx6q_add_spdif_audio_device();
+		break;
+	case PANEL_MODE_LCD:
+		imx6dl_add_imx_elcdif(&wvga_fb_data[0]);
+		gpio_request(MX6_BRD_LCD_PWR_EN, "elcdif-power-on");
+		gpio_direction_output(MX6_BRD_LCD_PWR_EN, 1);
+		mxc_register_device(&lcd_wvga_device, NULL);
+		break;
+	default:
+		pr_err("Error display_panel_mode\n");
 	}
 
+	i2c_register_board_info(0, mxc_i2c0_board_info,
+			ARRAY_SIZE(mxc_i2c0_board_info));
 	i2c_register_board_info(1, mxc_i2c1_board_info,
 			ARRAY_SIZE(mxc_i2c1_board_info));
-	/* only camera on I2C3, that's why we can do so */
+
+	/* only camera on I2C2, that's why we can do so */
 	if (csi_enabled == 1) {
 		mxc_register_device(&csi_v4l2_devices, NULL);
 		imx6q_add_imx_i2c(2, &mx6_evk_i2c2_data);
@@ -1457,27 +1486,11 @@ static void __init mx6_evk_init(void)
 	imx6q_add_mxc_pwm(0);
 	imx6q_add_mxc_pwm_backlight(0, &mx6_evk_pwm_backlight_data);
 
-	if (hdmi_enabled) {
-		imx6dl_add_imx_elcdif(&hdmi_fb_data[0]);
-	} else {
-		imx6dl_add_imx_elcdif(&wvga_fb_data[0]);
-
-		gpio_request(MX6_BRD_LCD_PWR_EN, "elcdif-power-on");
-		gpio_direction_output(MX6_BRD_LCD_PWR_EN, 1);
-		mxc_register_device(&lcd_wvga_device, NULL);
-	}
-
 	imx6dl_add_imx_pxp();
 	imx6dl_add_imx_pxp_client();
-	mxc_register_device(&max17135_sensor_device, NULL);
-	setup_spdc();
+
 	if (csi_enabled) {
 		imx6sl_add_fsl_csi();
-	} else  {
-		if (!spdc_sel)
-			imx6dl_add_imx_epdc(&epdc_data);
-		else
-			imx6sl_add_imx_spdc(&spdc_data);
 	}
 	imx6q_add_dvfs_core(&mx6sl_evk_dvfscore_data);
 
@@ -1496,12 +1509,6 @@ static void __init mx6_evk_init(void)
 	imx6sl_add_dcp();
 	imx6sl_add_rngb();
 	imx6sl_add_imx_pxp_v4l2();
-
-	mxc_spdif_data.spdif_core_clk = clk_get_sys("mxc_spdif.0", NULL);
-	clk_put(mxc_spdif_data.spdif_core_clk);
-	imx6q_add_spdif(&mxc_spdif_data);
-	imx6q_add_spdif_dai();
-	imx6q_add_spdif_audio_device();
 
 	imx6q_add_perfmon(0);
 	imx6q_add_perfmon(1);
@@ -1542,6 +1549,27 @@ static void __init mx6_evk_reserve(void)
 	}
 #endif
 }
+
+static int __init display_panel_setup(char *options)
+{
+	if (!options || !*options) {
+		pr_err("Error panel options\n");
+		return 0;
+	}
+
+	if (!strcmp(options, "lcd"))
+		display_panel_mode = PANEL_MODE_LCD;
+	else if (!strcmp(options, "hdmi"))
+		display_panel_mode = PANEL_MODE_HDMI;
+	else if (!strcmp(options, "eink"))
+		display_panel_mode = PANEL_MODE_EINK;
+	else
+		pr_warn("WARN: invalid display panel mode setting");
+
+	return 1;
+}
+
+__setup("panel=", display_panel_setup);
 
 MACHINE_START(MX6SL_EVK, "Freescale i.MX 6SoloLite EVK Board")
 	.boot_params	= MX6SL_PHYS_OFFSET + 0x100,
