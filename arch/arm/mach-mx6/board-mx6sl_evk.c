@@ -1290,9 +1290,9 @@ static int mx6sl_evk_keymap[] = {
 	KEY(1, 3, KEY_MENU),
 
 	KEY(2, 0, KEY_PREVIOUS),
-	KEY(2, 1, KEY_NEXT),
+	KEY(2, 1, KEY_VOLUMEDOWN),
 	KEY(2, 2, KEY_HOME),
-	KEY(2, 3, KEY_NEXT),
+	KEY(2, 3, KEY_VOLUMEUP),
 
 	KEY(3, 0, KEY_UP),
 	KEY(3, 1, KEY_LEFT),
