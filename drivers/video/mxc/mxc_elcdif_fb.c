@@ -1300,6 +1300,13 @@ static int mxc_elcdif_fb_unmap_video_memory(struct fb_info *fbi)
 	return 0;
 }
 
+static ssize_t show_disp_dev(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "elcd");;
+}
+static DEVICE_ATTR(fsl_disp_dev_property, S_IRUGO, show_disp_dev, NULL);
+
 static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -1478,6 +1485,12 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 		goto err3;
 
 	platform_set_drvdata(pdev, fbi);
+
+	ret = device_create_file(fbi->dev, &dev_attr_fsl_disp_dev_property);
+	if (ret)
+		dev_err(&pdev->dev, "Error %d on creating file for disp "
+						" device property\n", ret);
+
 
 	return 0;
 err3:
