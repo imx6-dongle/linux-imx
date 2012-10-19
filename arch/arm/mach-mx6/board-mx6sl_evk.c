@@ -1253,6 +1253,7 @@ static struct mxc_fb_platform_data wvga_fb_data[] = {
 	 .mode_str = "SEIKO-WVGA",
 	 .mode = wvga_video_modes,
 	 .num_modes = ARRAY_SIZE(wvga_video_modes),
+	 .panel_type = "lcd",
 	 },
 };
 
@@ -1275,6 +1276,7 @@ static struct mxc_fb_platform_data hdmi_fb_data[] = {
 	 .mode_str = "1920x1080M@60",
 	 .mode = hdmi_video_modes,
 	 .num_modes = ARRAY_SIZE(hdmi_video_modes),
+	 .panel_type = "hdmi",
 	 },
 };
 
