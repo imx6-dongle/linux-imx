@@ -1303,7 +1303,17 @@ static int mxc_elcdif_fb_unmap_video_memory(struct fb_info *fbi)
 static ssize_t show_disp_dev(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "elcd");;
+	if (dev) {
+		char *panel_type = dev->platform_data;
+
+		if (panel_type)
+			return sprintf(buf, "%s", panel_type);
+		else
+			return sprintf(buf, "elcd default");
+	} else {
+		dev_err(dev, "%s[%s], none dev\n", __FILE__, __func__);
+		return 0;
+	}
 }
 static DEVICE_ATTR(fsl_disp_dev_property, S_IRUGO, show_disp_dev, NULL);
 
@@ -1485,6 +1495,8 @@ static int mxc_elcdif_fb_probe(struct platform_device *pdev)
 		goto err3;
 
 	platform_set_drvdata(pdev, fbi);
+
+	fbi->dev->platform_data = pdata->panel_type;
 
 	ret = device_create_file(fbi->dev, &dev_attr_fsl_disp_dev_property);
 	if (ret)
