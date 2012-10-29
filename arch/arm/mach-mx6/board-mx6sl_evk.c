@@ -1384,6 +1384,52 @@ static void __init uart2_init(void)
 					ARRAY_SIZE(mx6sl_uart2_pads));
 	imx6sl_add_imx_uart(1, &mx6sl_evk_uart1_data);
 }
+
+
+#if defined(CONFIG_KEYBOARD_GPIO) || defined(CONFIG_KEYBOARD_GPIO_MODULE)
+
+#define MX6SL_EVK_POWER_OFF	IMX_GPIO_NR(3, 18)
+
+#define GPIO_BUTTON(gpio_num, ev_code, act_low, descr, wake, debounce)	\
+{								\
+	.gpio		= gpio_num,				\
+	.type		= EV_KEY,				\
+	.code		= ev_code,				\
+	.active_low	= act_low,				\
+	.desc		= "btn " descr,				\
+	.wakeup		= wake,					\
+	.debounce_interval = debounce,				\
+}
+
+static struct gpio_keys_button imx6sl_buttons[] = {
+	GPIO_BUTTON(MX6SL_EVK_POWER_OFF, KEY_POWER, 1, "power", 1, 1),
+};
+
+static struct gpio_keys_platform_data imx6sl_button_data = {
+	.buttons	= imx6sl_buttons,
+	.nbuttons	= ARRAY_SIZE(imx6sl_buttons),
+	.rep            = 0,
+};
+
+static struct platform_device imx6sl_button_device = {
+	.name		= "gpio-keys",
+	.id		= -1,
+	.num_resources  = 0,
+	.dev		= {
+		.platform_data = &imx6sl_button_data,
+	}
+};
+
+static void __init imx6sl_add_device_buttons(void)
+{
+	platform_device_register(&imx6sl_button_device);
+}
+#else
+static void __init imx6sl_add_device_buttons(void) {}
+#endif
+
+
+
 /*!
  * Board specific initialization.
  */
@@ -1506,6 +1552,7 @@ static void __init mx6_evk_init(void)
 	imx6q_add_imx2_wdt(0, NULL);
 
 	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
+	imx6sl_add_device_buttons();
 	imx6sl_add_imx_keypad(&mx6sl_evk_map_data);
 	imx6q_add_busfreq();
 	imx6sl_add_dcp();

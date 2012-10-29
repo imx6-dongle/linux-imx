@@ -223,8 +223,8 @@ static iomux_v3_cfg_t mx6sl_brd_pads[] = {
 	MX6SL_PAD_KEY_ROW2__KPP_ROW_2,
 	MX6SL_PAD_KEY_ROW3__KPP_ROW_3,
 
-	/* WDOG */
-	MX6SL_PAD_WDOG_B__WDOG1_WDOG_B,
+	/* The WDOG_B pad is used as an power key gpio button */
+	MX6SL_PAD_WDOG_B__GPIO_3_18,
 
 	/* Charge */
 	MX6SL_PAD_ECSPI2_MISO__GPIO_4_14,  /* CHG_FLT */

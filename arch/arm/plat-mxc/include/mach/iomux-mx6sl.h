@@ -3085,7 +3085,7 @@
 #define MX6SL_PAD_WDOG_B__UART5_RI                                            \
 		IOMUX_PAD(0x05A8, 0x02A0, 2, 0x0000, 0, MX6SL_UART_PAD_CTRL)
 #define MX6SL_PAD_WDOG_B__GPIO_3_18                                           \
-		IOMUX_PAD(0x05A8, 0x02A0, 5, 0x0000, 0, NO_PAD_CTRL)
+		IOMUX_PAD(0x05A8, 0x02A0, 5, 0x0000, 0, MX6SL_KEYPAD_CTRL)
 #define MX6SL_PAD_WDOG_B__OBSERVE_MUX_OUT_2                                   \
 		IOMUX_PAD(0x05A8, 0x02A0, 7, 0x0000, 0, NO_PAD_CTRL)
 
