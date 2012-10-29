@@ -1281,25 +1281,25 @@ static struct mxc_fb_platform_data hdmi_fb_data[] = {
 };
 
 static int mx6sl_evk_keymap[] = {
-	KEY(0, 0, KEY_SELECT),
-	KEY(0, 1, KEY_BACK),
-	KEY(0, 2, KEY_F1),
-	KEY(0, 3, KEY_F2),
+	KEY(0, 0, KEY_SELECT),     /* EVK:SW6        DC2:SELECT */
+	KEY(0, 1, KEY_BACK),       /* EVK:SW7        DC2:BACK	*/
+	KEY(0, 2, KEY_F1),         /* EVK:SW8        DC2:F1	*/
+	KEY(0, 3, KEY_F2),         /* EVK            DC2:F2	*/
 
-	KEY(1, 0, KEY_F3),
-	KEY(1, 1, KEY_F4),
-	KEY(1, 2, KEY_POWER),
-	KEY(1, 3, KEY_MENU),
+	KEY(1, 0, KEY_F3),         /* EVK:SW9        DC2:F3	*/
+	KEY(1, 1, KEY_VOLUMEDOWN), /* EVK:SW10       DC2:F4	*/
+	KEY(1, 2, KEY_VOLUMEUP),   /* EVK:SW11       DC2:F5	*/
+	KEY(1, 3, KEY_MENU),       /* EVK            DC2:MENU	*/
 
-	KEY(2, 0, KEY_PREVIOUS),
-	KEY(2, 1, KEY_VOLUMEDOWN),
-	KEY(2, 2, KEY_HOME),
-	KEY(2, 3, KEY_VOLUMEUP),
+	KEY(2, 0, KEY_PREVIOUS),   /* EVK:SW12       DC2:PREV	*/
+	KEY(2, 1, KEY_NEXT),       /* EVK:SW13       DC2:NEX1	*/
+	KEY(2, 2, KEY_HOME),       /* EVK            DC2:HOME	*/
+	KEY(2, 3, KEY_NEXT),       /* EVK            DC2:NEX2	*/
 
-	KEY(3, 0, KEY_UP),
-	KEY(3, 1, KEY_LEFT),
-	KEY(3, 2, KEY_RIGHT),
-	KEY(3, 3, KEY_DOWN),
+	KEY(3, 0, KEY_UP),         /* EVK            DC2:UP	*/
+	KEY(3, 1, KEY_LEFT),       /* EVK            DC2:LEFT	*/
+	KEY(3, 2, KEY_RIGHT),      /* EVK            DC2:RIGHT	*/
+	KEY(3, 3, KEY_DOWN),       /* EVK            DC2:DOWN	*/
 };
 
 static const struct matrix_keymap_data mx6sl_evk_map_data __initconst = {
