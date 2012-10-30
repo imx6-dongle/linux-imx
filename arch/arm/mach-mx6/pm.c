@@ -72,7 +72,6 @@
 static struct clk *cpu_clk;
 static struct clk *axi_clk;
 static struct clk *periph_clk;
-static struct clk *axi_org_parent;
 static struct clk *pll3_usb_otg_main_clk;
 
 static struct pm_platform_data *pm_data;
@@ -177,14 +176,10 @@ static void usb_power_up_handler(void)
 }
 
 
-/*
- * For safety, DO NOT define ENABLE_DISP_POWER_GATING for MX6SL EVK.
- * Otherwise will meet PxP processing timeout When run EPDC unit test.
- * The cause is under investigation.
- */
 static void disp_power_down(void)
 {
-#ifdef	ENABLE_DISP_POWER_GATING
+#if !defined(CONFIG_FB_MXC_ELCDIF_FB) && \
+    !defined(CONFIG_FB_MXC_ELCDIF_FB_MODULE)
 	if (cpu_is_mx6sl()) {
 		__raw_writel(0xFFFFFFFF, gpc_base + GPC_PGC_DISP_PUPSCR_OFFSET);
 		__raw_writel(0xFFFFFFFF, gpc_base + GPC_PGC_DISP_PDNSCR_OFFSET);
@@ -206,7 +201,8 @@ static void disp_power_down(void)
 
 static void disp_power_up(void)
 {
-#ifdef	ENABLE_DISP_POWER_GATING
+#if !defined(CONFIG_FB_MXC_ELCDIF_FB) && \
+    !defined(CONFIG_FB_MXC_ELCDIF_FB_MODULE)
 	if (cpu_is_mx6sl()) {
 		/*
 		 * Need to enable EPDC/LCDIF pix clock, and
@@ -344,9 +340,6 @@ static int mx6_suspend_enter(suspend_state_t state)
 		return -EINVAL;
 	}
 
-	axi_org_parent = clk_get_parent(axi_clk);
-	clk_set_parent(axi_clk, periph_clk);
-
 	if (state == PM_SUSPEND_MEM || state == PM_SUSPEND_STANDBY) {
 		if (pm_data && pm_data->suspend_enter)
 			pm_data->suspend_enter();
@@ -362,6 +355,30 @@ static int mx6_suspend_enter(suspend_state_t state)
 
 		suspend_in_iram(state, (unsigned long)iram_paddr,
 			(unsigned long)suspend_iram_base, cpu_type);
+
+		/* Reset the RBC counter. */
+		/* All interrupts should be masked before the
+		  * RBC counter is reset.
+		 */
+		/* Mask all interrupts. These will be unmasked by
+		  * the mx6_suspend_restore routine below.
+		  */
+		__raw_writel(0xffffffff, gpc_base + 0x08);
+		__raw_writel(0xffffffff, gpc_base + 0x0c);
+		__raw_writel(0xffffffff, gpc_base + 0x10);
+		__raw_writel(0xffffffff, gpc_base + 0x14);
+
+		/* Clear the RBC counter and RBC_EN bit. */
+		/* Disable the REG_BYPASS_COUNTER. */
+		__raw_writel(__raw_readl(MXC_CCM_CCR) &
+			~MXC_CCM_CCR_RBC_EN, MXC_CCM_CCR);
+		/* Make sure we clear REG_BYPASS_COUNT*/
+		__raw_writel(__raw_readl(MXC_CCM_CCR) &
+		(~MXC_CCM_CCR_REG_BYPASS_CNT_MASK), MXC_CCM_CCR);
+		/* Need to wait for a minimum of 2 CLKILS (32KHz) for the
+		  * counter to clear and reset.
+		  */
+		udelay(80);
 
 		if (arm_pg) {
 			/* restore gic registers */
@@ -383,7 +400,6 @@ static int mx6_suspend_enter(suspend_state_t state)
 	} else {
 			cpu_do_idle();
 	}
-	clk_set_parent(axi_clk, axi_org_parent);
 
 	return 0;
 }
