@@ -22,11 +22,11 @@
 #include <linux/vermagic.h>
 
 static int ac_online			= 1;
-static int battery_status		= POWER_SUPPLY_STATUS_DISCHARGING;
+static int battery_status		= POWER_SUPPLY_STATUS_FULL;
 static int battery_health		= POWER_SUPPLY_HEALTH_GOOD;
 static int battery_present		= 1; /* true */
 static int battery_technology		= POWER_SUPPLY_TECHNOLOGY_LION;
-static int battery_capacity		= 50;
+static int battery_capacity		= 100;
 
 static int test_power_get_ac_property(struct power_supply *psy,
 				      enum power_supply_property psp,
