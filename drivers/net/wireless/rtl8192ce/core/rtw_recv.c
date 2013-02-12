@@ -1413,6 +1413,13 @@ _func_enter_;
 				mybssid[4],
 				mybssid[5]));
 
+			if(!bmcast)
+			{
+				DBG_871X("issue_deauth to the nonassociated ap=" MAC_FMT " for the reason(7)\n", MAC_ARG(pattrib->bssid));
+	            
+				issue_deauth(adapter, pattrib->bssid, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);	
+			}	
+
 			#ifdef DBG_RX_DROP_FRAME
 			DBG_871X("DBG_RX_DROP_FRAME %s compare BSSID fail ; BSSID=%x:%x:%x:%x:%x:%x, mybssid= %x:%x:%x:%x:%x:%x\n", __FUNCTION__,
 				pattrib->bssid[0], pattrib->bssid[1], pattrib->bssid[2],
@@ -1467,6 +1474,17 @@ _func_enter_;
 	}
 	else
 	{
+		if(_rtw_memcmp(myhwaddr, pattrib->dst, ETH_ALEN)&& (!bmcast))
+		{
+			*psta = rtw_get_stainfo(pstapriv, pattrib->bssid); // get sta_info
+			if (*psta == NULL)
+			{
+				DBG_871X("issue_deauth to the ap=" MAC_FMT " for the reason(7)\n", MAC_ARG(pattrib->bssid));
+		
+				issue_deauth(adapter, pattrib->bssid, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);				
+			}
+		}	
+	
 		ret = _FAIL;
 		#ifdef DBG_RX_DROP_FRAME
 		DBG_871X("DBG_RX_DROP_FRAME %s fw_state:0x%x\n", __FUNCTION__, get_fwstate(pmlmepriv));
@@ -1509,10 +1527,14 @@ _func_enter_;
 				}
 
 			*psta = rtw_get_stainfo(pstapriv, pattrib->src);
-
 			if (*psta == NULL)
 			{
 				RT_TRACE(_module_rtl871x_recv_c_,_drv_err_,("can't get psta under AP_MODE; drop pkt\n"));
+				
+				DBG_871X("issue_deauth to sta=" MAC_FMT "for the reason(7)\n", MAC_ARG(pattrib->src));
+				
+				issue_deauth(adapter, pattrib->src, WLAN_REASON_CLASS3_FRAME_FROM_NONASSOC_STA);
+				
 				ret= _FAIL;
 				goto exit;
 			}
@@ -2394,13 +2416,8 @@ static void recvframe_expand_pkt(
 	pfhdr->pkt = ppkt;
 	pfhdr->rx_head = ppkt->head;
 	pfhdr->rx_data = ppkt->data;
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
-	pfhdr->rx_tail = ppkt->head + ppkt->tail; //skb_tail_pointer(skb);
-	pfhdr->rx_end = ppkt->head + ppkt->end; //skb_end_pointer(skb);
-#else
-	pfhdr->rx_tail = ppkt->tail;
-	pfhdr->rx_end = ppkt->end;
-#endif
+	pfhdr->rx_tail = skb_tail_pointer(ppkt);
+	pfhdr->rx_end = skb_end_pointer(ppkt);
 }
 #else
 #warning "recvframe_expand_pkt not implement, defrag may crash system"
@@ -2705,7 +2722,7 @@ int amsdu_to_msdu(_adapter *padapter, union recv_frame *prframe)
 			{
 				sub_skb->data = pdata;
 				sub_skb->len = nSubframe_Length;
-				sub_skb->tail = sub_skb->data + nSubframe_Length;
+				skb_set_tail_pointer(sub_skb, nSubframe_Length);
 			}
 			else
 			{
@@ -3229,7 +3246,7 @@ int check_indicate_seq(struct recv_reorder_ctrl *preorder_ctrl, u16 seq_num)
 		//DbgPrint("CheckRxTsIndicateSeq(): Packet Drop! IndicateSeq: %d, NewSeq: %d\n", precvpriv->indicate_seq, seq_num);
 
 		#ifdef DBG_RX_DROP_FRAME
-		DBG_871X("DBG_RX_DROP_FRAME %s IndicateSeq: %d, NewSeq: %d\n", __FUNCTION__,
+		DBG_871X("%s IndicateSeq: %d > NewSeq: %d\n", __FUNCTION__, 
 			preorder_ctrl->indicate_seq, seq_num);
 		#endif
 
@@ -3615,7 +3632,12 @@ int recv_indicatepkt_reorder(_adapter *padapter, union recv_frame *prframe)
 		#ifdef DBG_RX_DROP_FRAME
 		DBG_871X("DBG_RX_DROP_FRAME %s check_indicate_seq fail\n", __FUNCTION__);
 		#endif
-		goto _err_exit;
+		
+		rtw_recv_indicatepkt(padapter, prframe);
+
+		_exit_critical_bh(&ppending_recvframe_queue->lock, &irql);
+		
+		goto _success_exit;
 	}
 
 
@@ -3654,6 +3676,8 @@ int recv_indicatepkt_reorder(_adapter *padapter, union recv_frame *prframe)
 		_cancel_timer_ex(&preorder_ctrl->reordering_ctrl_timer);
 	}
 
+
+_success_exit:
 
 	return _SUCCESS;
 
@@ -3951,13 +3975,15 @@ int recv_func_posthandle(_adapter *padapter, union recv_frame *prframe)
 		#ifdef DBG_RX_DROP_FRAME
 		DBG_871X("DBG_RX_DROP_FRAME %s what is this condition??\n", __FUNCTION__);
 		#endif
+		goto _recv_data_drop;
 	}
 #endif // CONFIG_80211N_HT
-_recv_data_drop:
-	precvpriv->rx_drop++;
 
 _exit_recv_func:
+	return ret;
 
+_recv_data_drop:
+	precvpriv->rx_drop++;
 	return ret;
 }
 
@@ -4036,9 +4062,6 @@ _func_exit_;
 
 _recv_entry_drop:
 
-
-	//precvpriv->rx_drop++;
-
 #ifdef CONFIG_MP_INCLUDED
 	padapter->mppriv.rx_pktloss = precvpriv->rx_drop;
 #endif
@@ -4070,17 +4093,17 @@ void rtw_signal_stat_timer_hdl(RTW_TIMER_HDL_ARGS){
 
 		if(recvpriv->signal_strength_data.update_req == 0) {// update_req is clear, means we got rx
 			avg_signal_strength = recvpriv->signal_strength_data.avg_val;
-			avg_signal_qual = recvpriv->signal_qual_data.avg_val;
+			num_signal_strength = recvpriv->signal_strength_data.total_num;
+			// after avg_vals are accquired, we can re-stat the signal values
+			recvpriv->signal_strength_data.update_req = 1;
 		}
 		
 		if(recvpriv->signal_qual_data.update_req == 0) {// update_req is clear, means we got rx
-			num_signal_strength = recvpriv->signal_strength_data.total_num;
+			avg_signal_qual = recvpriv->signal_qual_data.avg_val;
 			num_signal_qual = recvpriv->signal_qual_data.total_num;
+			// after avg_vals are accquired, we can re-stat the signal values
+			recvpriv->signal_qual_data.update_req = 1;
 		}
-		
-		// after avg_vals are accquired, we can re-stat the signal values
-		recvpriv->signal_strength_data.update_req = 1;
-		recvpriv->signal_qual_data.update_req = 1;
 
 		//update value of signal_strength, rssi, signal_qual
 		if(check_fwstate(&adapter->mlmepriv, _FW_UNDER_SURVEY) == _FALSE) {

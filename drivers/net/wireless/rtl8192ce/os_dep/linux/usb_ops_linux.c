@@ -162,7 +162,7 @@ unsigned int ffaddr2pipehdl(struct dvobj_priv *pdvobj, u32 addr)
 {
 	unsigned int pipe=0;
 	int ep_num=0;
-	_adapter *padapter = pdvobj->padapter;
+	_adapter *padapter = pdvobj->if1;
 	struct usb_device *pusbd = pdvobj->pusbdev;	
 	HAL_DATA_TYPE *pHalData = GET_HAL_DATA(padapter);
 
@@ -220,7 +220,7 @@ static u32 usb_bulkout_zero(struct intf_hdl *pintfhdl, u32 addr)
 	struct zero_bulkout_context *pcontext;
 	PURB	purb = NULL;	
 	_adapter *padapter = (_adapter *)pintfhdl->padapter;
-	struct dvobj_priv *pdvobj = (struct dvobj_priv *)&padapter->dvobjpriv;	
+	struct dvobj_priv *pdvobj = adapter_to_dvobj(padapter);	
 	struct usb_device *pusbd = pdvobj->pusbdev;
 
 	//DBG_871X("%s\n", __func__);
@@ -321,16 +321,16 @@ _func_enter_;
 
 	switch(pxmitbuf->flags)
 	{
-		case XMIT_VO_QUEUE:
+		case VO_QUEUE_INX:
 			pxmitpriv->voq_cnt--;			
 			break;
-		case XMIT_VI_QUEUE:
+		case VI_QUEUE_INX:
 			pxmitpriv->viq_cnt--;		
 			break;
-		case XMIT_BE_QUEUE:
+		case BE_QUEUE_INX:
 			pxmitpriv->beq_cnt--;			
 			break;
-		case XMIT_BK_QUEUE:
+		case BK_QUEUE_INX:
 			pxmitpriv->bkq_cnt--;			
 			break;
 		case HIGH_QUEUE_INX:
@@ -383,7 +383,7 @@ _func_enter_;
 		_rtw_up_sema(&(pxmitpriv->tx_retevt));
 	}
 */
-        //rtw_free_xmitframe_ex(pxmitpriv, pxmitframe);
+        //rtw_free_xmitframe(pxmitpriv, pxmitframe);
 	
 	if(padapter->bSurpriseRemoved || padapter->bDriverStopped ||padapter->bWritePortCancel)
 	{
@@ -443,12 +443,10 @@ _func_enter_;
 	#endif
 
 check_completion:
-	if (pxmitbuf->isSync) {
-		pxmitbuf->status = purb->status;
-		complete(&pxmitbuf->done);
-	} else {
-		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-	}
+	rtw_sctx_done_err(&pxmitbuf->sctx,
+		purb->status ? RTW_SCTX_DONE_WRITE_PORT_ERR : RTW_SCTX_DONE_SUCCESS);
+	
+	rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 
 	//if(rtw_txframes_pending(padapter))	
 	{
@@ -459,15 +457,15 @@ _func_exit_;
 
 }
 
-static u32 usb_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem, int timeout_ms)
+u32 usb_write_port(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
 {    
 	_irqL irqL;
 	unsigned int pipe;
 	int status;
-	u32 ret, bwritezero = _FALSE;
+	u32 ret = _FAIL, bwritezero = _FALSE;
 	PURB	purb = NULL;
 	_adapter *padapter = (_adapter *)pintfhdl->padapter;
-	struct dvobj_priv	*pdvobj = (struct dvobj_priv   *)&padapter->dvobjpriv;	
+	struct dvobj_priv	*pdvobj = adapter_to_dvobj(padapter);	
 	struct xmit_priv	*pxmitpriv = &padapter->xmitpriv;
 	struct xmit_buf *pxmitbuf = (struct xmit_buf *)wmem;
 	struct xmit_frame *pxmitframe = (struct xmit_frame *)pxmitbuf->priv_data;
@@ -478,17 +476,14 @@ _func_enter_;
 	
 	RT_TRACE(_module_hci_ops_os_c_,_drv_err_,("+usb_write_port\n"));
 	
-	if((padapter->bDriverStopped) || (padapter->bSurpriseRemoved) ||(padapter->pwrctrlpriv.pnp_bstop_trx))
-	{
+	if ((padapter->bDriverStopped) || (padapter->bSurpriseRemoved) ||(padapter->pwrctrlpriv.pnp_bstop_trx)) {
 		#ifdef DBG_TX
 		DBG_871X(" DBG_TX %s:%d bDriverStopped%d, bSurpriseRemoved:%d, pnp_bstop_trx:%d\n",__FUNCTION__, __LINE__
-		,padapter->bDriverStopped, padapter->bSurpriseRemoved, padapter->pwrctrlpriv.pnp_bstop_trx );
+			,padapter->bDriverStopped, padapter->bSurpriseRemoved, padapter->pwrctrlpriv.pnp_bstop_trx );
 		#endif
-		
-		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-		
 		RT_TRACE(_module_hci_ops_os_c_,_drv_err_,("usb_write_port:( padapter->bDriverStopped ||padapter->bSurpriseRemoved ||adapter->pwrctrlpriv.pnp_bstop_trx)!!!\n"));
-		return _FAIL;
+		rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_TX_DENY);
+		goto exit;
 	}
 	
 	_enter_critical(&pxmitpriv->lock, &irqL);
@@ -497,62 +492,30 @@ _func_enter_;
 	{
 		case VO_QUEUE_INX:
 			pxmitpriv->voq_cnt++;
-			pxmitbuf->flags = XMIT_VO_QUEUE;
+			pxmitbuf->flags = VO_QUEUE_INX;
 			break;
 		case VI_QUEUE_INX:
 			pxmitpriv->viq_cnt++;
-			pxmitbuf->flags = XMIT_VI_QUEUE;
+			pxmitbuf->flags = VI_QUEUE_INX;
 			break;
 		case BE_QUEUE_INX:
 			pxmitpriv->beq_cnt++;
-			pxmitbuf->flags = XMIT_BE_QUEUE;
+			pxmitbuf->flags = BE_QUEUE_INX;
 			break;
 		case BK_QUEUE_INX:
 			pxmitpriv->bkq_cnt++;
-			pxmitbuf->flags = XMIT_BK_QUEUE;
+			pxmitbuf->flags = BK_QUEUE_INX;
 			break;
 		case HIGH_QUEUE_INX:
 			pxmitbuf->flags = HIGH_QUEUE_INX;
 			break;
 		default:
-			pxmitbuf->flags = XMIT_VO_QUEUE;
+			pxmitbuf->flags = MGT_QUEUE_INX;
 			break;
 	}
 		
 	_exit_critical(&pxmitpriv->lock, &irqL);
 		
-/*
-	_enter_critical(&pxmitpriv->lock, &irqL);
-
-	//total irp 
-	pxmitpriv->txirp_cnt++;
-	
-	//per ac irp
-	switch(pattrib->priority) 
-	{
-		case 1:				
-		case 2:				
-			pxmitpriv->bkq_cnt++;
-			break;
-		case 4:
-		case 5:
-			pxmitpriv->viq_cnt++;
-			break;
-		case 6:
-		case 7:
-			pxmitpriv->voq_cnt++;
-			break;
-		case 0:
-		case 3:			
-		default:
-			pxmitpriv->beq_cnt++;
-			break;		
-	}
-
-
-	_exit_critical(&pxmitpriv->lock, &irqL);
-*/
-
 	purb	= pxmitbuf->pxmit_urb[0];
 
 #if 0
@@ -608,33 +571,23 @@ _func_enter_;
         }			
 #endif
 
-	if (timeout_ms >= 0) {
-		init_completion(&pxmitbuf->done);
-		pxmitbuf->isSync = _TRUE;
-	} else {
-		pxmitbuf->isSync = _FALSE;
-	}
-	pxmitbuf->status = 0;
-
 	status = usb_submit_urb(purb, GFP_ATOMIC);
-	if (!status)
-	{		
-		ret= _SUCCESS;
+	if (!status) {
 		#ifdef DBG_CONFIG_ERROR_DETECT	
 		{	
 			HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
 			pHalData->srestpriv.last_tx_time = rtw_get_current_time();		
 		}
 		#endif
-	}
-	else
-	{
+	} else {
+		rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_WRITE_PORT_ERR);
 		DBG_871X("usb_write_port, status=%d\n", status);
 		RT_TRACE(_module_hci_ops_os_c_,_drv_err_,("usb_write_port(): usb_submit_urb, status=%x\n", status));
-		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-		ret= _FAIL;
+		goto exit;
 	}
-	
+
+	ret= _SUCCESS;
+
 //   Commented by Albert 2009/10/13
 //   We add the URB_ZERO_PACKET flag to urb so that the host will send the zero packet automatically.
 /*	
@@ -644,43 +597,14 @@ _func_enter_;
 	}
 */
 
-	// synchronous write handling
-	if(pxmitbuf->isSync == _TRUE && ret == _SUCCESS) {
-		unsigned long expire = timeout_ms ? msecs_to_jiffies(timeout_ms) : MAX_SCHEDULE_TIMEOUT;
-		int status;
-
-		if (!wait_for_completion_timeout(&pxmitbuf->done, expire)) {
-			usb_kill_urb(purb);
-			status = (pxmitbuf->status == -ENOENT ? -ETIMEDOUT : pxmitbuf->status);
-		} else {
-			status = pxmitbuf->status;
-		}
-
-		if (!status) {
-			ret= _SUCCESS;
-		} else {
-			DBG_871X("usb_write_port sync, status=%d\n", status);
-			ret = _FAIL;
-		}
-		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-	}
-
 	RT_TRACE(_module_hci_ops_os_c_,_drv_err_,("-usb_write_port\n"));
 
+exit:
+	if (ret != _SUCCESS)
+		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 _func_exit_;
-	
 	return ret;
 
-}
-
-inline u32 usb_write_port_async(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
-{
-	return usb_write_port(pintfhdl, addr, cnt, wmem, -1);
-}
-
-inline int usb_write_port_sync(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *wmem)
-{
-	return usb_write_port(pintfhdl, addr, cnt, wmem, RTW_USB_BULKOUT_TIMEOUT);
 }
 
 void usb_write_port_cancel(struct intf_hdl *pintfhdl)

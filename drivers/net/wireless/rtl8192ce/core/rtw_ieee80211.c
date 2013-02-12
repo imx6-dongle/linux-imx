@@ -205,6 +205,104 @@ _func_exit_;
 	return NULL;
 }
 
+/**
+ * rtw_get_ie_ex - Search specific IE from a series of IEs
+ * @in_ie: Address of IEs to search
+ * @in_len: Length limit from in_ie
+ * @eid: Element ID to match
+ * @oui: OUI to match
+ * @oui_len: OUI length
+ * @ie: If not NULL and the specific IE is found, the IE will be copied to the buf starting from the specific IE
+ * @ielen: If not NULL and the specific IE is found, will set to the length of the entire IE
+ *
+ * Returns: The address of the specific IE found, or NULL
+ */
+u8 *rtw_get_ie_ex(u8 *in_ie, uint in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, uint *ielen)
+{
+	uint cnt;
+	u8 *target_ie = NULL;
+
+
+	if(ielen)
+		*ielen = 0;
+
+	if(!in_ie || in_len<=0)
+		return target_ie;
+
+	cnt = 0;
+
+	while(cnt<in_len)
+	{
+		if(eid == in_ie[cnt]
+			&& ( !oui || _rtw_memcmp(&in_ie[cnt+2], oui, oui_len) == _TRUE))
+		{
+			target_ie = &in_ie[cnt];
+
+			if(ie)
+				_rtw_memcpy(ie, &in_ie[cnt], in_ie[cnt+1]+2);
+			
+			if(ielen)
+				*ielen = in_ie[cnt+1]+2;
+
+			break;
+		}
+		else
+		{
+			cnt+=in_ie[cnt+1]+2; //goto next	
+		}		
+
+	}	
+
+	return target_ie;
+}
+
+/**
+ * rtw_ies_remove_ie - Find matching IEs and remove
+ * @ies: Address of IEs to search
+ * @ies_len: Pointer of length of ies, will update to new length
+ * @offset: The offset to start scarch
+ * @eid: Element ID to match
+ * @oui: OUI to match
+ * @oui_len: OUI length
+ *
+ * Returns: _SUCCESS: ies is updated, _FAIL: not updated
+ */
+int rtw_ies_remove_ie(u8 *ies, uint *ies_len, uint offset, u8 eid, u8 *oui, u8 oui_len)
+{
+	int ret = _FAIL;
+	u8 *target_ie;
+	u32 target_ielen;
+	u8 *start;
+	uint search_len;
+	
+	if(!ies || !ies_len || *ies_len <= offset)
+		goto exit;
+
+	start = ies + offset;
+	search_len = *ies_len - offset;
+
+	while (1) {
+		target_ie = rtw_get_ie_ex(start, search_len, eid, oui, oui_len, NULL, &target_ielen);
+		if (target_ie && target_ielen) {
+			u8 buf[MAX_IE_SZ] = {0};
+			u8 *remain_ies = target_ie + target_ielen;
+			uint remain_len = search_len - (remain_ies - start);
+			
+			_rtw_memcpy(buf, remain_ies, remain_len);
+			_rtw_memcpy(target_ie, buf, remain_len);
+			*ies_len = *ies_len - target_ielen;
+			ret = _SUCCESS;
+
+			start = target_ie;
+			search_len = remain_len;
+		} else {
+			break;
+		}
+	}
+exit:
+	return ret;
+}
+
 void rtw_set_supported_rate(u8* SupportedRates, uint mode) 
 {
 _func_enter_;
@@ -1179,7 +1277,7 @@ void dump_p2p_ie(u8 *ie, u32 ie_len) {
  *
  * Returns: The address of the P2P IE found, or NULL
  */
-u8 *rtw_get_p2p_ie(u8 *in_ie, uint in_len, u8 *p2p_ie, uint *p2p_ielen)
+u8 *rtw_get_p2p_ie(u8 *in_ie, int in_len, u8 *p2p_ie, uint *p2p_ielen)
 {
 	uint cnt = 0;
 	u8 *p2p_ie_ptr;
@@ -1191,7 +1289,12 @@ u8 *rtw_get_p2p_ie(u8 *in_ie, uint in_len, u8 *p2p_ie, uint *p2p_ielen)
 	while(cnt<in_len)
 	{
 		eid = in_ie[cnt];
-		
+		if ((in_len < 0) || (cnt > MAX_IE_SZ)) {
+#ifdef PLATFORM_LINUX
+			dump_stack();
+#endif
+			return NULL;
+		}
 		if( ( eid == _VENDOR_SPECIFIC_IE_ ) && ( _rtw_memcmp( &in_ie[cnt+2], p2p_oui, 4) == _TRUE ) )
 		{
 			p2p_ie_ptr = in_ie + cnt;

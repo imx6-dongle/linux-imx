@@ -32,15 +32,6 @@
 
 extern u32 EDCAParam[maxAP][3] ;
 
-#define	OFDM_TABLE_SIZE 	37
-#define	OFDM_TABLE_SIZE_92D 	43
-#define	CCK_TABLE_SIZE		33
-extern u32 OFDMSwingTable[OFDM_TABLE_SIZE_92D] ;
-
-extern u8 CCKSwingTable_Ch1_Ch13[CCK_TABLE_SIZE][8];
-
-extern u8 CCKSwingTable_Ch14 [CCK_TABLE_SIZE][8];
-
 //============================================================
 // structure and define
 //============================================================
@@ -101,6 +92,7 @@ typedef struct _Dynamic_Initial_Gain_Threshold_
 	u8		LargeFAHit;
 	u8		ForbiddenIGI;
 	u32		Recover_cnt;
+	u8		rx_gain_range_min_nolink;
 }DIG_T,*pDIG_T;
 
 typedef enum tag_Dynamic_Init_Gain_Operation_Type_Definition
@@ -177,8 +169,8 @@ typedef enum tag_DIG_Connect_Definition
 #define		DM_DIG_FA_TH2				0x400//0x200
 //this is for 92d
 #define		DM_DIG_FA_TH0_92D			0x100
-#define		DM_DIG_FA_TH1_92D			0x400
-#define		DM_DIG_FA_TH2_92D			0x600
+#define		DM_DIG_FA_TH1_92D			0x150
+#define		DM_DIG_FA_TH2_92D			0x250
 
 #define		DM_DIG_BACKOFF_MAX			12
 #define		DM_DIG_BACKOFF_MIN			(-4)

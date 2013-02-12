@@ -38,7 +38,6 @@
 #endif
 #endif
 
-
 #define RT_TAG	'1178'
 
 #ifdef DBG_MEMORY_LEAK
@@ -1025,13 +1024,26 @@ u32	rtw_get_current_time(void)
 inline u32 rtw_systime_to_ms(u32 systime)
 {
 #ifdef PLATFORM_LINUX
-	return systime*1000/HZ;
+	return systime * 1000 / HZ;
 #endif	
 #ifdef PLATFORM_FREEBSD
-	return systime*1000;
+	return systime * 1000;
 #endif	
 #ifdef PLATFORM_WINDOWS
-	return systime /10000 ; 
+	return systime / 10000 ; 
+#endif
+}
+
+inline u32 rtw_ms_to_systime(u32 ms)
+{
+#ifdef PLATFORM_LINUX
+	return ms * HZ / 1000;
+#endif	
+#ifdef PLATFORM_FREEBSD
+	return ms /1000;
+#endif	
+#ifdef PLATFORM_WINDOWS
+	return ms / 10000 ; 
 #endif
 }
 
@@ -1265,28 +1277,15 @@ static android_suspend_lock_t rtw_suspend_lock ={
 
 inline void rtw_suspend_lock_init()
 {
-	#if  defined(CONFIG_WAKELOCK) || defined(CONFIG_ANDROID_POWER)
-	DBG_871X("##########%s ###########\n", __FUNCTION__);
-	#endif
 	#ifdef CONFIG_WAKELOCK
 	wake_lock_init(&rtw_suspend_lock, WAKE_LOCK_SUSPEND, RTW_SUSPEND_LOCK_NAME);
 	#elif defined(CONFIG_ANDROID_POWER)
 	android_init_suspend_lock(&rtw_suspend_lock);
 	#endif
-	
 }
 
 inline void rtw_suspend_lock_uninit()
 {
-
-	#if  defined(CONFIG_WAKELOCK) || defined(CONFIG_ANDROID_POWER)
-	DBG_871X("##########%s###########\n", __FUNCTION__);
-	if(rtw_suspend_lock.link.next == LIST_POISON1 || rtw_suspend_lock.link.prev == LIST_POISON2) {
-		DBG_871X("##########%s########### list poison!!\n", __FUNCTION__);
-		return;	
-	}
-	#endif
-	
 	#ifdef CONFIG_WAKELOCK
 	wake_lock_destroy(&rtw_suspend_lock);
 	#elif defined(CONFIG_ANDROID_POWER)
@@ -1294,18 +1293,8 @@ inline void rtw_suspend_lock_uninit()
 	#endif
 }
 
-
 inline void rtw_lock_suspend()
 {
-
-	#if  defined(CONFIG_WAKELOCK) || defined(CONFIG_ANDROID_POWER)
-	//DBG_871X("##########%s###########\n", __FUNCTION__);
-	if(rtw_suspend_lock.link.next == LIST_POISON1 || rtw_suspend_lock.link.prev == LIST_POISON2) {
-		DBG_871X("##########%s########### list poison!!\n", __FUNCTION__);
-		return;	
-	}
-	#endif
-	
 	#ifdef CONFIG_WAKELOCK
 	wake_lock(&rtw_suspend_lock);
 	#elif defined(CONFIG_ANDROID_POWER)
@@ -1315,14 +1304,6 @@ inline void rtw_lock_suspend()
 
 inline void rtw_unlock_suspend()
 {
-	#if  defined(CONFIG_WAKELOCK) || defined(CONFIG_ANDROID_POWER)
-	//DBG_871X("##########%s###########\n", __FUNCTION__);
-	if(rtw_suspend_lock.link.next == LIST_POISON1 || rtw_suspend_lock.link.prev == LIST_POISON2) {
-		DBG_871X("##########%s########### list poison!!\n", __FUNCTION__);
-		return;	
-	}
-	#endif
-	
 	#ifdef CONFIG_WAKELOCK
 	wake_unlock(&rtw_suspend_lock);
 	#elif defined(CONFIG_ANDROID_POWER)
@@ -1771,9 +1752,7 @@ int rtw_change_ifname(_adapter *padapter, const char *ifname)
 #endif
 		unregister_netdevice(cur_pnetdev);
 
-	#ifdef CONFIG_PROC_DEBUG
 	rtw_proc_remove_one(cur_pnetdev);
-	#endif //CONFIG_PROC_DEBUG
 
 	rereg_priv->old_pnetdev=cur_pnetdev;
 
@@ -1783,19 +1762,7 @@ int rtw_change_ifname(_adapter *padapter, const char *ifname)
 		goto error;
 	}
 
-#ifdef CONFIG_USB_HCI
-
-	SET_NETDEV_DEV(pnetdev, &padapter->dvobjpriv.pusbintf->dev);
-
-#elif defined(CONFIG_PCI_HCI)
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,5,0)
-	SET_NETDEV_DEV(pnetdev, &padapter->dvobjpriv.ppcidev->dev);
-#endif
-
-	pci_set_drvdata(padapter->dvobjpriv.ppcidev, pnetdev);
-
-#endif
+	SET_NETDEV_DEV(pnetdev, dvobj_to_dev(adapter_to_dvobj(padapter)));
 
 	rtw_init_netdev_name(pnetdev, ifname);
 
@@ -1813,9 +1780,7 @@ int rtw_change_ifname(_adapter *padapter, const char *ifname)
 		goto error;
 	}
 
-	#ifdef CONFIG_PROC_DEBUG
 	rtw_proc_init_one(pnetdev);
-	#endif //CONFIG_PROC_DEBUG
 
 	return 0;
 
@@ -1917,5 +1882,148 @@ u64 rtw_division64(u64 x, u64 y)
 #elif defined(PLATFORM_FREEBSD)
 	return (x / y);
 #endif
+}
+
+void rtw_buf_free(u8 **buf, u32 *buf_len)
+{
+	u32 ori_len;
+
+	if (!buf || !buf_len)
+		return;
+
+	ori_len = *buf_len;
+
+	if (*buf) {
+		*buf_len = 0;
+		_rtw_mfree(*buf, *buf_len);
+		*buf = NULL;
+	}
+}
+
+void rtw_buf_update(u8 **buf, u32 *buf_len, u8 *src, u32 src_len)
+{
+	u32 ori_len = 0, dup_len = 0;
+	u8 *ori = NULL;
+	u8 *dup = NULL;
+
+	if (!buf || !buf_len)
+		return;
+
+	if (!src || !src_len)
+		goto keep_ori;
+
+	/* duplicate src */
+	dup = rtw_malloc(src_len);
+	if (dup) {
+		dup_len = src_len;
+		_rtw_memcpy(dup, src, dup_len);
+	}
+
+keep_ori:
+	ori = *buf;
+	ori_len = *buf_len;
+
+	/* replace buf with dup */
+	*buf_len = 0;
+	*buf = dup;
+	*buf_len = dup_len;
+
+	/* free ori */
+	if (ori && ori_len > 0)
+		_rtw_mfree(ori, ori_len);
+}
+
+
+/**
+ * rtw_cbuf_full - test if cbuf is full
+ * @cbuf: pointer of struct rtw_cbuf
+ *
+ * Returns: _TRUE if cbuf is full
+ */
+inline bool rtw_cbuf_full(struct rtw_cbuf *cbuf)
+{
+	return (cbuf->write == cbuf->read-1)? _TRUE : _FALSE;
+}
+
+/**
+ * rtw_cbuf_empty - test if cbuf is empty
+ * @cbuf: pointer of struct rtw_cbuf
+ *
+ * Returns: _TRUE if cbuf is empty
+ */
+inline bool rtw_cbuf_empty(struct rtw_cbuf *cbuf)
+{
+	return (cbuf->write == cbuf->read)? _TRUE : _FALSE;
+}
+
+/**
+ * rtw_cbuf_push - push a pointer into cbuf
+ * @cbuf: pointer of struct rtw_cbuf
+ * @buf: pointer to push in
+ *
+ * Lock free operation, be careful of the use scheme
+ * Returns: _TRUE push success
+ */
+bool rtw_cbuf_push(struct rtw_cbuf *cbuf, void *buf)
+{
+	if (rtw_cbuf_full(cbuf))
+		return _FAIL;
+
+	if (0)
+		DBG_871X("%s on %u\n", __func__, cbuf->write);
+	cbuf->bufs[cbuf->write] = buf;
+	cbuf->write = (cbuf->write+1)%cbuf->size;
+
+	return _SUCCESS;
+}
+
+/**
+ * rtw_cbuf_pop - pop a pointer from cbuf
+ * @cbuf: pointer of struct rtw_cbuf
+ *
+ * Lock free operation, be careful of the use scheme
+ * Returns: pointer popped out
+ */
+void *rtw_cbuf_pop(struct rtw_cbuf *cbuf)
+{
+	void *buf;
+	if (rtw_cbuf_empty(cbuf))
+		return NULL;
+
+	if (0)
+		DBG_871X("%s on %u\n", __func__, cbuf->read);
+	buf = cbuf->bufs[cbuf->read];
+	cbuf->read = (cbuf->read+1)%cbuf->size;
+
+	return buf;
+}
+
+/**
+ * rtw_cbuf_alloc - allocte a rtw_cbuf with given size and do initialization
+ * @size: size of pointer
+ *
+ * Returns: pointer of srtuct rtw_cbuf, NULL for allocation failure
+ */
+struct rtw_cbuf *rtw_cbuf_alloc(u32 size)
+{
+	struct rtw_cbuf *cbuf;
+
+	cbuf = (struct rtw_cbuf *)rtw_malloc(sizeof(*cbuf) + sizeof(void*)*size);
+
+	if (cbuf) {
+		cbuf->write = cbuf->read = 0;
+		cbuf->size = size;
+	}
+
+	return cbuf;
+}
+
+/**
+ * rtw_cbuf_free - free the given rtw_cbuf
+ * @cbuf: pointer of struct rtw_cbuf to free
+ */
+void rtw_cbuf_free(struct rtw_cbuf *cbuf)
+{
+	rtw_mfree((u8*)cbuf, sizeof(*cbuf) + sizeof(void*)*cbuf->size);
 }
 

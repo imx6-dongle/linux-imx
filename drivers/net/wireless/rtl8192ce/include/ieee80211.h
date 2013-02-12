@@ -73,6 +73,9 @@ enum {
 	RTL871X_HOSTAPD_SET_WPS_PROBE_RESP = 18,
 	RTL871X_HOSTAPD_SET_WPS_ASSOC_RESP = 19,
 	RTL871X_HOSTAPD_SET_HIDDEN_SSID = 20,
+	RTL871X_HOSTAPD_SET_MACADDR_ACL = 21,
+	RTL871X_HOSTAPD_ACL_ADD_STA = 22,
+	RTL871X_HOSTAPD_ACL_REMOVE_STA = 23,
 };
 
 /* STA flags */
@@ -159,6 +162,17 @@ extern u8 RSN_CIPHER_SUITE_WRAP[];
 extern u8 RSN_CIPHER_SUITE_CCMP[];
 extern u8 RSN_CIPHER_SUITE_WEP104[];
 
+typedef enum _RATR_TABLE_MODE{
+	RATR_INX_WIRELESS_NGB = 0,	// BGN 40 Mhz 2SS 1SS
+	RATR_INX_WIRELESS_NG = 1,		// GN or N
+	RATR_INX_WIRELESS_NB = 2,		// BGN 20 Mhz 2SS 1SS  or BN
+	RATR_INX_WIRELESS_N = 3,
+	RATR_INX_WIRELESS_GB = 4,
+	RATR_INX_WIRELESS_G = 5,
+	RATR_INX_WIRELESS_B = 6,
+	RATR_INX_WIRELESS_MC = 7,
+	RATR_INX_WIRELESS_AC_N = 8,
+}RATR_TABLE_MODE, *PRATR_TABLE_MODE;
 
 enum NETWORK_TYPE
 {
@@ -177,6 +191,7 @@ enum NETWORK_TYPE
     WIRELESS_11G_24N = (WIRELESS_11G|WIRELESS_11_24N), // tx: ofdm & MCS, rx: ofdm & cck & MCS, hw: cck & ofdm
     WIRELESS_11A_5N = (WIRELESS_11A|WIRELESS_11_5N), // tx: ofdm & MCS, rx: ofdm & MCS, hw: ofdm only
     WIRELESS_11BG_24N = (WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N), // tx: ofdm & cck & MCS, rx: ofdm & cck & MCS, hw: ofdm & cck
+    WIRELESS_11AGN = (WIRELESS_11A|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11_5N), // tx: ofdm & MCS, rx: ofdm & MCS, hw: ofdm only
     WIRELESS_11ABGN = (WIRELESS_11A|WIRELESS_11B|WIRELESS_11G|WIRELESS_11_24N|WIRELESS_11_5N),
 };
 
@@ -201,7 +216,7 @@ enum NETWORK_TYPE
 typedef struct ieee_param {
 	u32 cmd;
 	u8 sta_addr[ETH_ALEN];
-        union {
+	union {
 		struct {
 			u8 name;
 			u32 value;
@@ -240,6 +255,30 @@ typedef struct ieee_param {
 
 	} u;	   
 }ieee_param;
+
+#ifdef CONFIG_AP_MODE
+typedef struct ieee_param_ex {
+	u32 cmd;
+	u8 sta_addr[ETH_ALEN];
+	u8 data[0];
+}ieee_param_ex;
+
+struct sta_data{
+	u16 aid;
+	u16 capability;
+	int flags;
+	u32 sta_set;
+	u8 tx_supp_rates[16];	
+	u32 tx_supp_rates_len;
+	struct rtw_ieee80211_ht_cap ht_cap;
+	u64	rx_pkts;
+	u64	rx_bytes;
+	u64	rx_drops;
+	u64	tx_pkts;
+	u64	tx_bytes;
+	u64	tx_drops;
+};
+#endif
 
 
 #if WIRELESS_EXT < 17
@@ -444,6 +483,11 @@ enum eap_type {
 
 #define RTW_IEEE80211_SCTL_FRAG		0x000F
 #define RTW_IEEE80211_SCTL_SEQ		0xFFF0
+
+
+#define RTW_ERP_INFO_NON_ERP_PRESENT BIT(0)
+#define RTW_ERP_INFO_USE_PROTECTION BIT(1)
+#define RTW_ERP_INFO_BARKER_PREAMBLE_MODE BIT(2)
 
 /* QoS,QOS */
 #define NORMAL_ACK			0
@@ -1012,7 +1056,7 @@ struct ieee80211_txb {
 
 #define CRC_LENGTH                 4U
 
-#define MAX_WPA_IE_LEN (128)
+#define MAX_WPA_IE_LEN (256)
 #define MAX_WPS_IE_LEN (512)
 #define MAX_P2P_IE_LEN (256)
 #define MAX_WFD_IE_LEN (128)
@@ -1345,6 +1389,9 @@ ParseRes rtw_ieee802_11_parse_elems(u8 *start, uint len,
 u8 *rtw_set_fixed_ie(unsigned char *pbuf, unsigned int len, unsigned char *source, unsigned int *frlen);
 u8 *rtw_set_ie(u8 *pbuf, sint index, uint len, u8 *source, uint *frlen);
 u8 *rtw_get_ie(u8*pbuf, sint index, sint *len, sint limit);
+u8 *rtw_get_ie_ex(u8 *in_ie, uint in_len, u8 eid, u8 *oui, u8 oui_len, u8 *ie, uint *ielen);
+int rtw_ies_remove_ie(u8 *ies, uint *ies_len, uint offset, u8 eid, u8 *oui, u8 oui_len);
+
 void rtw_set_supported_rate(u8* SupportedRates, uint mode) ;
 
 unsigned char *rtw_get_wpa_ie(unsigned char *pie, int *wpa_ie_len, int limit);
@@ -1361,17 +1408,18 @@ u8 *rtw_get_wps_ie(u8 *in_ie, uint in_len, u8 *wps_ie, uint *wps_ielen);
 u8 *rtw_get_wps_attr(u8 *wps_ie, uint wps_ielen, u16 target_attr_id ,u8 *buf_attr, u32 *len_attr);
 u8 *rtw_get_wps_attr_content(u8 *wps_ie, uint wps_ielen, u16 target_attr_id ,u8 *buf_content, uint *len_content);
 
-u8 *rtw_get_p2p_ie(u8 *in_ie, uint in_len, u8 *p2p_ie, uint *p2p_ielen);
+void dump_ies(u8 *buf, u32 buf_len);
+void dump_wps_ie(u8 *ie, u32 ie_len);
+
+#ifdef CONFIG_P2P
+void dump_p2p_ie(u8 *ie, u32 ie_len);
+u8 *rtw_get_p2p_ie(u8 *in_ie, int in_len, u8 *p2p_ie, uint *p2p_ielen);
 u8 *rtw_get_p2p_attr(u8 *p2p_ie, uint p2p_ielen, u8 target_attr_id ,u8 *buf_attr, u32 *len_attr);
 u8 *rtw_get_p2p_attr_content(u8 *p2p_ie, uint p2p_ielen, u8 target_attr_id ,u8 *buf_content, uint *len_content);
 u32 rtw_set_p2p_attr_content(u8 *pbuf, u8 attr_id, u16 attr_len, u8 *pdata_attr);
-
-void dump_ies(u8 *buf, u32 buf_len);
-void dump_wps_ie(u8 *ie, u32 ie_len);
-#ifdef CONFIG_P2P
-void dump_p2p_ie(u8 *ie, u32 ie_len);
 void rtw_WLAN_BSSID_EX_remove_p2p_attr(WLAN_BSSID_EX *bss_ex, u8 attr_id);
 #endif
+
 #ifdef CONFIG_WFD
 int rtw_get_wfd_ie(u8 *in_ie, int in_len, u8 *wfd_ie, uint *wfd_ielen);
 int rtw_get_wfd_attr_content(u8 *wfd_ie, uint wfd_ielen, u8 target_attr_id ,u8 *attr_content, uint *attr_contentlen);

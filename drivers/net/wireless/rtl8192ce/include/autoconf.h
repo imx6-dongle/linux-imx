@@ -36,6 +36,7 @@
 	//#define RTW_USE_CFG80211_STA_EVENT /* Opne this for Android 4.1's wpa_supplicant */
 	#define CONFIG_CFG80211_FORCE_COMPATIBLE_2_6_37_UNDER
 	//#define CONFIG_DEBUG_CFG80211 1
+	#define CONFIG_SET_SCAN_DENY_TIMER
 #endif
 
 /*
@@ -80,11 +81,14 @@
 	//Added by Albert 20110812
 	//The CONFIG_WFD is for supporting the Wi-Fi display
 	#define CONFIG_WFD	1
-	
-	#define CONFIG_P2P_REMOVE_GROUP_INFO
+
+	#ifndef CONFIG_WIFI_TEST
+		#define CONFIG_P2P_REMOVE_GROUP_INFO
+	#endif
 	//#define CONFIG_DBG_P2P
 
-	#define CONFIG_P2P_PS
+	//#define CONFIG_P2P_PS
+	//#define CONFIG_P2P_IPS
 #endif
 
 //	Added by Kurt 20110511
@@ -95,9 +99,10 @@
 #define CONFIG_BR_EXT_BRNAME	"br0"
 #endif	// CONFIG_BR_EXT
 
-//#define CONFIG_CONCURRENT_MODE 1
+#define CONFIG_CONCURRENT_MODE 1
 #ifdef CONFIG_CONCURRENT_MODE
 	#define CONFIG_TSF_RESET_OFFLOAD 1			// For 2 PORT TSF SYNC.
+	#define CONFIG_HWPORT_SWAP				//Port0->Sec , Port1 -> Pri
 #endif	// CONFIG_CONCURRENT_MODE
 
 #define CONFIG_SKB_COPY //for amsdu

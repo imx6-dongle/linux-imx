@@ -24,7 +24,7 @@
 
 /*Created on  2011/11/11,  8: 8*/
 
-#define Rtl8192DEImgArrayLength 32106
+#define Rtl8192DEImgArrayLength 32296
 extern const u8 Rtl8192DEFwImgArray[Rtl8192DEImgArrayLength];
 #define Rtl8192DEMainArrayLength 1
 extern const u8 Rtl8192DEFwMainArray[Rtl8192DEMainArrayLength];

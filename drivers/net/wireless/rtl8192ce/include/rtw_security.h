@@ -129,7 +129,6 @@ struct security_priv
 	unsigned int wpa2_pairwise_cipher;	
 #endif
 
-	u8 wps_phase;//for wps
 	u8 wps_ie[MAX_WPS_IE_LEN];//added in assoc req
 	int wps_ie_len;
 	
@@ -182,6 +181,7 @@ struct security_priv
 	//u32				PMKIDCount;						// Added by Annie, 2006-10-13.
 	//u8				szCapability[256];				// For WPA2-PSK using zero-config, by Annie, 2005-09-20.
 
+	u8 bWepDefaultKeyIdxSet;
 };
 
 struct sha256_state {

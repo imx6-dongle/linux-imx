@@ -47,45 +47,54 @@
 #define	SCANQUEUE_LIFETIME 20 // unit:sec
 #endif
 
-#define 	WIFI_NULL_STATE		0x00000000
-#define	WIFI_ASOC_STATE		0x00000001		// Under Linked state...
-#define 	WIFI_REASOC_STATE	       0x00000002
-#define	WIFI_SLEEP_STATE	       0x00000004
-#define	WIFI_STATION_STATE	0x00000008
+#define 	WIFI_NULL_STATE			0x00000000
+
+#define	WIFI_ASOC_STATE			0x00000001		// Under Linked state...
+#define 	WIFI_REASOC_STATE	       	0x00000002
+#define	WIFI_SLEEP_STATE			0x00000004
+#define	WIFI_STATION_STATE		0x00000008
+
 #define	WIFI_AP_STATE				0x00000010
 #define	WIFI_ADHOC_STATE			0x00000020
 #define   WIFI_ADHOC_MASTER_STATE 0x00000040
 #define   WIFI_UNDER_LINKING		0x00000080
-//#define WIFI_UNDER_CMD			0x00000200
+
+#define	WIFI_UNDER_WPS			0x00000100
+//#define	WIFI_UNDER_CMD			0x00000200
+//#define	WIFI_UNDER_P2P			0x00000400
+#define	WIFI_SITE_MONITOR			0x00000800		//to indicate the station is under site surveying
+
+#ifdef WDS
+#define	WIFI_WDS					0x00001000
+#define	WIFI_WDS_RX_BEACON		0x00002000		// already rx WDS AP beacon
+#endif
+#ifdef AUTO_CONFIG
+#define	WIFI_AUTOCONF				0x00004000
+#define	WIFI_AUTOCONF_IND		0x00008000
+#endif
+
+/*
 // ========== P2P Section Start ===============
 #define	WIFI_P2P_LISTEN_STATE		0x00010000
 #define	WIFI_P2P_GROUP_FORMATION_STATE		0x00020000
 // ========== P2P Section End ===============
-#define WIFI_SITE_MONITOR		0x00000800		//to indicate the station is under site surveying
-
-#ifdef WDS
-#define	WIFI_WDS				0x00001000
-#define	WIFI_WDS_RX_BEACON	0x00002000		// already rx WDS AP beacon
-#endif
-#ifdef AUTO_CONFIG
-#define	WIFI_AUTOCONF			0x00004000
-#define	WIFI_AUTOCONF_IND	0x00008000
-#endif
+*/
 
 //#ifdef UNDER_MPTEST
-#define	WIFI_MP_STATE						0x00010000
-#define	WIFI_MP_CTX_BACKGROUND			0x00020000	// in continous tx background
-#define	WIFI_MP_CTX_ST					0x00040000	// in continous tx with single-tone
+#define	WIFI_MP_STATE							0x00010000
+#define	WIFI_MP_CTX_BACKGROUND				0x00020000	// in continous tx background
+#define	WIFI_MP_CTX_ST						0x00040000	// in continous tx with single-tone
 #define	WIFI_MP_CTX_BACKGROUND_PENDING	0x00080000	// pending in continous tx background due to out of skb
-#define	WIFI_MP_CTX_CCK_HW				0x00100000	// in continous tx
-#define	WIFI_MP_CTX_CCK_CS				0x00200000	// in continous tx with carrier suppression
-#define   WIFI_MP_LPBK_STATE				0x00400000
+#define	WIFI_MP_CTX_CCK_HW					0x00100000	// in continous tx
+#define	WIFI_MP_CTX_CCK_CS					0x00200000	// in continous tx with carrier suppression
+#define   WIFI_MP_LPBK_STATE					0x00400000
 //#endif
 
 //#define _FW_UNDER_CMD		WIFI_UNDER_CMD
 #define _FW_UNDER_LINKING	WIFI_UNDER_LINKING
 #define _FW_LINKED			WIFI_ASOC_STATE
 #define _FW_UNDER_SURVEY	WIFI_SITE_MONITOR
+
 
 enum dot11AuthAlgrthmNum {
  dot11AuthAlgrthm_Open = 0,
@@ -222,7 +231,7 @@ struct cfg80211_wifidirect_info{
 	enum nl80211_channel_type	remain_on_ch_type;
 	u64						remain_on_ch_cookie;
 	struct net_device 			*remain_on_ch_dev;
-	
+	bool is_ro_ch;
 };
 #endif //CONFIG_IOCTL_CFG80211
 
@@ -355,6 +364,7 @@ struct mlme_priv {
 
 	u8	*nic_hdl;
 
+	u8	not_indic_disco;
 	_list		*pscanned;
 	_queue	free_bss_pool;
 	_queue	scanned_queue;
@@ -442,6 +452,11 @@ struct mlme_priv {
 	u16 ht_op_mode;
 #endif /* CONFIG_80211N_HT */	
 
+	u8 *assoc_req;
+	u32 assoc_req_len;
+	u8 *assoc_rsp;
+	u32 assoc_rsp_len;
+
 	u8 *wps_beacon_ie;	
 	//u8 *wps_probe_req_ie;
 	u8 *wps_probe_resp_ie;
@@ -495,6 +510,8 @@ struct mlme_priv {
 	ATOMIC_T	rx_probe_rsp; // 1:receive probe respone from RDS source.
 	u8	*l2sdTaBuffer;
 	u8	channel_idx;
+	s8	group_cnt;	//For WiDi 3.5, they specified another scan algo. for WFD/RDS co-existed
+	u8	sa_ext[L2SDTA_SERVICE_VE_LEN];
 #endif // CONFIG_INTEL_WIDI
 
 #ifdef CONFIG_CONCURRENT_MODE
@@ -666,6 +683,7 @@ extern void rtw_free_assoc_resources(_adapter* adapter, int lock_scanned_queue);
 extern void rtw_indicate_disconnect(_adapter* adapter);
 extern void rtw_indicate_connect(_adapter* adapter);
 void rtw_indicate_scan_done( _adapter *padapter, bool aborted);
+void rtw_scan_abort(_adapter *adapter);
 
 extern int rtw_restruct_sec_ie(_adapter *adapter,u8 *in_ie,u8 *out_ie,uint in_len);
 extern int rtw_restruct_wmm_ie(_adapter *adapter, u8 *in_ie, u8 *out_ie, uint in_len, uint initial_out_len);
@@ -723,6 +741,7 @@ void rtw_issue_addbareq_cmd(_adapter *padapter, struct xmit_frame *pxmitframe);
 #endif
 
 int rtw_is_same_ibss(_adapter *adapter, struct wlan_network *pnetwork);
+int is_same_network(WLAN_BSSID_EX *src, WLAN_BSSID_EX *dst);
 
 #ifdef CONFIG_LAYER2_ROAMING
 void rtw_roaming(_adapter *padapter, struct wlan_network *tgt_network);

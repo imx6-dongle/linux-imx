@@ -28,7 +28,7 @@
 extern unsigned char MCS_rate_2R[16];
 extern unsigned char MCS_rate_1R[16];
 extern void process_wmmps_data(_adapter *padapter, union recv_frame *precv_frame);
-extern void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe);
+extern s32 rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe);
 
 void rtw_reset_tdls_info(_adapter* padapter)
 {
@@ -483,7 +483,7 @@ void issue_tunneled_probe_req(_adapter *padapter)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TUNNELED_PROBE_REQ) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -526,7 +526,7 @@ void issue_tunneled_probe_rsp(_adapter *padapter, union recv_frame *precv_frame)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TUNNELED_PROBE_RSP) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -592,7 +592,7 @@ void issue_tdls_setup_req(_adapter *padapter, u8 *mac_addr)
 		else
 		{
 			rtw_free_xmitbuf(pxmitpriv,pmgntframe->pxmitbuf);
-			rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+			rtw_free_xmitframe(pxmitpriv, pmgntframe);
 			goto exit;
 		}
 	}
@@ -609,7 +609,7 @@ void issue_tdls_setup_req(_adapter *padapter, u8 *mac_addr)
 	pattrib->qsel=pattrib->priority;
 	if(rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_SETUP_REQUEST) !=_SUCCESS ){
 		rtw_free_xmitbuf(pxmitpriv,pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -659,7 +659,7 @@ void issue_tdls_teardown(_adapter *padapter, u8 *mac_addr)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_TEARDOWN) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -717,7 +717,7 @@ void issue_tdls_dis_req(_adapter *padapter, u8 *mac_addr)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_DISCOVERY_REQUEST) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -760,7 +760,7 @@ void issue_tdls_setup_rsp(_adapter *padapter, union recv_frame *precv_frame)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_SETUP_RESPONSE) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -804,7 +804,7 @@ void issue_tdls_setup_cfm(_adapter *padapter, union recv_frame *precv_frame)
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_SETUP_CONFIRM) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;		
 	}
 
@@ -910,7 +910,7 @@ void issue_tdls_peer_traffic_indication(_adapter *padapter, struct sta_info *ptd
 	pattrib->qsel=pattrib->priority;
 	if (rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_PEER_TRAFFIC_INDICATION) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -950,7 +950,7 @@ void issue_tdls_ch_switch_req(_adapter *padapter, u8 *mac_addr)
 	pattrib->qsel=pattrib->priority;
 	if(rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_CHANNEL_SWITCH_REQUEST) !=_SUCCESS ){
 		rtw_free_xmitbuf(pxmitpriv,pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;
 	}
 	rtw_dump_xframe(padapter, pmgntframe);
@@ -999,7 +999,7 @@ void issue_tdls_ch_switch_rsp(_adapter *padapter, u8 *mac_addr)
 */
 	if(rtw_xmit_tdls_coalesce(padapter, pmgntframe, TDLS_CHANNEL_SWITCH_RESPONSE) !=_SUCCESS ){
 		rtw_free_xmitbuf(pxmitpriv,pmgntframe->pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pmgntframe);
+		rtw_free_xmitframe(pxmitpriv, pmgntframe);
 		goto exit;	
 	}
 	rtw_dump_xframe(padapter, pmgntframe);

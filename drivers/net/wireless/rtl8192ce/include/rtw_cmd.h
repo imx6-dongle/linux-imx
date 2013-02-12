@@ -46,6 +46,7 @@
 #endif
 
 	struct cmd_obj {
+		_adapter *padapter;
 		u16	cmdcode;
 		u8	res;
 		u8	*parmbuf;
@@ -88,7 +89,15 @@
 		_sema	evt_notify;
 		_sema	terminate_evtthread_sema;
 		_queue	evt_queue;
-#endif		
+#endif
+
+//#define CONFIG_C2H_WK
+#ifdef CONFIG_C2H_WK
+		_workitem c2h_wk;
+		bool c2h_wk_alive;
+		struct rtw_cbuf *c2h_queue;
+		#define C2H_QUEUE_MAX_LEN 10
+#endif
 		
 #ifdef CONFIG_H2CLBK
 		_sema	lbkevt_done;
@@ -119,6 +128,15 @@ do {\
 	pcmd->rsp = NULL;\
 	pcmd->rspsz = 0;\
 } while(0)
+
+struct c2h_evt_hdr {
+	u8 id:4;
+	u8 plen:4;
+	u8 seq;
+	u8 payload[0];
+};
+
+#define c2h_evt_exist(c2h_evt) ((c2h_evt)->id || (c2h_evt)->plen)
 
 extern u32 rtw_enqueue_cmd(struct cmd_priv *pcmdpriv, struct cmd_obj *obj);
 extern struct cmd_obj *rtw_dequeue_cmd(struct cmd_priv *pcmdpriv);
@@ -160,6 +178,7 @@ enum rtw_drvextra_cmd_id
 	P2P_PROTO_WK_CID,
 	CHECK_HIQ_WK_CID,//for softap mode, check hi queue if empty
 	INTEl_WIDI_WK_CID,
+	C2H_WK_CID,
 	MAX_WK_CID
 };
 
@@ -953,6 +972,8 @@ extern u8 rtw_set_chplan_cmd(_adapter*padapter, u8 chplan, u8 enaueue);
 extern u8 rtw_led_blink_cmd(_adapter*padapter, PLED_871x pLed);
 extern u8 rtw_set_csa_cmd(_adapter*padapter, u8 new_ch_no);
 extern u8 rtw_tdls_cmd(_adapter*padapter, u8 *addr, u8 option);
+
+extern u8 rtw_c2h_wk_cmd(PADAPTER padapter, u8 *c2h_evt);
 
 u8 rtw_drvextra_cmd_hdl(_adapter *padapter, unsigned char *pbuf);
 

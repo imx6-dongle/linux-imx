@@ -37,7 +37,7 @@ s32	rtl8192ce_init_xmit_priv(_adapter *padapter)
 {
 	s32	ret = _SUCCESS;
 	struct xmit_priv	*pxmitpriv = &padapter->xmitpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
 
 	_rtw_spinlock_init(&pdvobjpriv->irq_th_lock);
@@ -55,7 +55,7 @@ s32	rtl8192ce_init_xmit_priv(_adapter *padapter)
 void	rtl8192ce_free_xmit_priv(_adapter *padapter)
 {
 	//u8	i;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
 
 	_rtw_spinlock_free(&pdvobjpriv->irq_th_lock);
@@ -294,10 +294,11 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u32 *pmem, s32 sz)
 	uint	qsel;
 	_adapter				*padapter = pxmitframe->padapter;
 	struct mlme_priv		*pmlmepriv = &padapter->mlmepriv;
-	struct dvobj_priv		*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv		*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct pkt_attrib		*pattrib = &pxmitframe->attrib;
 	struct ht_priv			*phtpriv = &pmlmepriv->htpriv;
-	struct mlme_ext_info	*pmlmeinfo = &padapter->mlmeextpriv.mlmext_info;
+	struct mlme_ext_priv	*pmlmeext = &padapter->mlmeextpriv;
+	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 	HAL_DATA_TYPE		*pHalData = GET_HAL_DATA(padapter);
 	struct dm_priv		*pdmpriv = &pHalData->dmpriv;
 	struct tx_desc		*ptxdesc = (struct tx_desc *)pmem;
@@ -376,6 +377,8 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u32 *pmem, s32 sz)
 
 			if (pmlmeinfo->preamble_mode == PREAMBLE_SHORT)
 				ptxdesc->txdw4 |= cpu_to_le32(BIT(24));// DATA_SHORT
+
+			ptxdesc->txdw5 |= cpu_to_le32(MRateToHwRate(pmlmeext->tx_rate));
 		}
 		
 		//offset 24
@@ -412,7 +415,16 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u32 *pmem, s32 sz)
 		ptxdesc->txdw4 |= cpu_to_le32(BIT(8));//driver uses rate
 		
 		//offset 20
-		
+#ifdef CONFIG_INTEL_PROXIM
+		if((padapter->proximity.proxim_on==_TRUE)&&(pattrib->intel_proxim==_TRUE)){
+			printk("\n %s pattrib->rate=%d\n",__FUNCTION__,pattrib->rate);
+			ptxdesc->txdw5 |= cpu_to_le32( pattrib->rate);
+		}
+		else
+#endif
+		{
+			ptxdesc->txdw5 |= cpu_to_le32(MRateToHwRate(pmlmeext->tx_rate));
+		}
 	}
 	else if((pxmitframe->frame_tag&0x0f) == TXAGG_FRAMETAG)
 	{
@@ -444,15 +456,7 @@ static s32 update_txdesc(struct xmit_frame *pxmitframe, u32 *pmem, s32 sz)
 		//offset 20
 		ptxdesc->txdw5 |= cpu_to_le32(BIT(17));//retry limit enable
 		ptxdesc->txdw5 |= cpu_to_le32(0x00180000);//retry limit = 6
-#ifdef CONFIG_P2P
-		//	Added by Albert 2011/03/17
-		//	In the P2P mode, the driver should not support the b mode.
-		//	So, the Tx packet shouldn't use the CCK rate
-		if(!rtw_p2p_chk_state(pwdinfo, P2P_STATE_NONE))
-		{
-			ptxdesc->txdw5 |= cpu_to_le32( 0x04 );	//	Use the 6M data rate.
-		}
-#endif //CONFIG_P2P
+		ptxdesc->txdw5 |= cpu_to_le32(MRateToHwRate(pmlmeext->tx_rate));
 
 	}
 
@@ -517,8 +521,10 @@ static struct tx_desc *get_txdesc(_adapter *padapter, u8 queue_index)
 }
 
 
-void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
+s32 rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 {
+	s32 ret = _SUCCESS;
+	s32 inner_ret = _SUCCESS;
        _irqL irqL;
 	int	t, sz, w_sz, pull=0;
 	//u8	*mem_addr;
@@ -526,7 +532,7 @@ void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 	struct xmit_buf		*pxmitbuf = pxmitframe->pxmitbuf;
 	struct pkt_attrib		*pattrib = &pxmitframe->attrib;
 	struct xmit_priv		*pxmitpriv = &padapter->xmitpriv;
-	struct dvobj_priv		*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv		*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct security_priv	*psecuritypriv = &padapter->securitypriv;
 	struct tx_desc		*ptxdesc;
 
@@ -544,6 +550,9 @@ void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 	
 	for (t = 0; t < pattrib->nr_frags; t++)
 	{
+		if (inner_ret != _SUCCESS && ret == _SUCCESS)
+			ret = _FAIL;
+
 		if (t != (pattrib->nr_frags - 1))
 		{
 			RT_TRACE(_module_rtl871x_xmit_c_,_drv_err_,("pattrib->nr_frags=%d\n", pattrib->nr_frags));
@@ -564,18 +573,16 @@ void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 		if(padapter->adapter_type > PRIMARY_ADAPTER)
 		{
 			_adapter 	  *pri_adapter = padapter->pbuddy_adapter;
-			struct dvobj_priv *pri_dvobjpriv = &pri_adapter->dvobjpriv;
+			struct dvobj_priv *pri_dvobjpriv = adapter_to_dvobj(pri_adapter);
 		
 			_enter_critical(&(pri_dvobjpriv->irq_th_lock), &irqL);
 
-
-				
-			
 			ptxdesc = get_txdesc(pri_adapter, ff_hwaddr);
 		
 			if(ptxdesc == NULL)
 			{
 				_exit_critical(&pri_dvobjpriv->irq_th_lock, &irqL);
+				rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_TX_DESC_NA);
 				rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 				DBG_8192C("##### Tx desc unavailable !#####\n");
 				break;
@@ -592,7 +599,7 @@ void rtw_dump_xframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 			_exit_critical(&pri_dvobjpriv->irq_th_lock, &irqL);
 
 			rtw_write16(pri_adapter, REG_PCIE_CTRL_REG, ffaddr2dma(ff_hwaddr));
-			rtw_write_port(padapter, ff_hwaddr, w_sz, (unsigned char*)pxmitbuf);	
+			inner_ret = rtw_write_port(padapter, ff_hwaddr, w_sz, (unsigned char*)pxmitbuf);	
 
 		} else
 skip_if2_tx:
@@ -600,11 +607,12 @@ skip_if2_tx:
 		{
 		_enter_critical(&pdvobjpriv->irq_th_lock, &irqL);
 
-			ptxdesc = get_txdesc(pxmitframe->padapter, ff_hwaddr);
+		ptxdesc = get_txdesc(pxmitframe->padapter, ff_hwaddr);
 
 		if(ptxdesc == NULL)
 		{
 			_exit_critical(&pdvobjpriv->irq_th_lock, &irqL);
+			rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_TX_DESC_NA);
 			rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
 			DBG_8192C("##### Tx desc unavailable !#####\n");
 			break;
@@ -623,7 +631,7 @@ skip_if2_tx:
 
 		_exit_critical(&pdvobjpriv->irq_th_lock, &irqL);
 		rtw_write16(padapter, REG_PCIE_CTRL_REG, ffaddr2dma(ff_hwaddr));
-		rtw_write_port(padapter, ff_hwaddr, w_sz, (unsigned char*)pxmitbuf);
+		inner_ret = rtw_write_port(padapter, ff_hwaddr, w_sz, (unsigned char*)pxmitbuf);
 
 		}
 
@@ -638,8 +646,12 @@ skip_if2_tx:
 
 	}
 	
-	rtw_free_xmitframe_ex(pxmitpriv, pxmitframe);
-	
+	rtw_free_xmitframe(pxmitpriv, pxmitframe);
+
+	if  (ret != _SUCCESS)
+		rtw_sctx_done_err(&pxmitbuf->sctx, RTW_SCTX_DONE_UNKNOWN);
+
+	return ret;
 }
 
 void rtl8192ce_xmitframe_resume(_adapter *padapter)
@@ -694,7 +706,7 @@ void rtl8192ce_xmitframe_resume(_adapter *padapter)
 			else
 			{
 				rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-				rtw_free_xmitframe_ex(pxmitpriv, pxmitframe);
+				rtw_free_xmitframe(pxmitpriv, pxmitframe);
 			}
 
 			xcnt++;
@@ -806,7 +818,7 @@ static s32 pre_xmitframe(_adapter *padapter, struct xmit_frame *pxmitframe)
 
 	if (xmitframe_direct(padapter, pxmitframe) != _SUCCESS) {
 		rtw_free_xmitbuf(pxmitpriv, pxmitbuf);
-		rtw_free_xmitframe_ex(pxmitpriv, pxmitframe);
+		rtw_free_xmitframe(pxmitpriv, pxmitframe);
 	}
 
 	return _TRUE;
@@ -817,7 +829,7 @@ enqueue:
 
 	if (res != _SUCCESS) {
 		RT_TRACE(_module_xmit_osdep_c_, _drv_err_, ("pre_xmitframe: enqueue xmitframe fail\n"));
-		rtw_free_xmitframe_ex(pxmitpriv, pxmitframe);
+		rtw_free_xmitframe(pxmitpriv, pxmitframe);
 
 		// Trick, make the statistics correct
 		pxmitpriv->tx_pkts--;
@@ -828,9 +840,9 @@ enqueue:
 	return _FALSE;
 }
 
-void rtl8192ce_mgnt_xmit(_adapter *padapter, struct xmit_frame *pmgntframe)
+s32 rtl8192ce_mgnt_xmit(_adapter *padapter, struct xmit_frame *pmgntframe)
 {
-	rtw_dump_xframe(padapter, pmgntframe);
+	return rtw_dump_xframe(padapter, pmgntframe);
 }
 
 /*
@@ -870,7 +882,7 @@ s32 rtl8192ce_hostap_mgnt_xmit_entry(_adapter *padapter, _pkt *pkt)
 	struct hostapd_priv *phostapdpriv = padapter->phostapdpriv;	
 	struct net_device *pnetdev = padapter->pnetdev;
 	HAL_DATA_TYPE *pHalData = GET_HAL_DATA(padapter);
-	struct dvobj_priv *pdvobj = &padapter->dvobjpriv;	
+	struct dvobj_priv *pdvobj = adapter_to_dvobj(padapter);
 
 	
 	//DBG_8192C("%s\n", __FUNCTION__);

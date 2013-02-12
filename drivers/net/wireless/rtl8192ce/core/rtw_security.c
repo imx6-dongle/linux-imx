@@ -1858,6 +1858,15 @@ _func_enter_;
 			res = _FAIL;
 		}
 	}
+
+	if(res == _FAIL)
+	{
+		int gg=0;
+		for(gg=0; gg < 32; gg++)
+			DBG_871X(" [%d]=%02x ", gg, pframe[gg]);
+		DBG_871X("error packet header \n");
+	}
+
 _func_exit_;	
 	return res;
 }
@@ -1911,8 +1920,16 @@ _func_enter_;
 			}
 	
 			length= ((union recv_frame *)precvframe)->u.hdr.len-prxattrib->hdrlen-prxattrib->iv_len;
-				
-			res= aes_decipher(prwskey,prxattrib->hdrlen,pframe, length);
+
+			if(psecuritypriv->dot118021XGrpKeyid == prxattrib->key_index)
+				res= aes_decipher(prwskey,prxattrib->hdrlen,pframe, length);
+			else
+			{
+				DBG_871X("not match packet_index=%d, install_index=%d \n"
+				, prxattrib->key_index, psecuritypriv->dot118021XGrpKeyid);
+				res=_FAIL;
+			}
+
 
 
 		}

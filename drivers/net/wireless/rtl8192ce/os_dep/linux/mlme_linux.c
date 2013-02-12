@@ -216,7 +216,6 @@ void rtw_reset_securitypriv( _adapter *adapter )
 
 		psec_priv->ndisauthtype = Ndis802_11AuthModeOpen;
 		psec_priv->ndisencryptstatus = Ndis802_11WEPDisabled;
-		psec_priv->wps_phase = _FALSE;
 		//}
 	}
 }

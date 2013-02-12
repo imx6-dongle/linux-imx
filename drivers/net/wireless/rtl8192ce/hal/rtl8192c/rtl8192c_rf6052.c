@@ -639,40 +639,24 @@ phy_RF6052_Config_ParaFile(
 	{
 		if(IS_92C_SERIAL( pHalData->VersionID))// 88c's IPA  is different from 92c's
 		{
-			if(IS_NORMAL_CHIP(pHalData->VersionID))
-			{
-				pszRadioAFile = sz92CRadioAFile;
-				pszRadioBFile = sz92CRadioBFile;
-			}
-			else
-			{
-				rtStatus = _FAIL;
-				return rtStatus;
-			}
+			pszRadioAFile = sz92CRadioAFile;
+			pszRadioBFile = sz92CRadioBFile;
 		}
 		else
 		{
-			if(IS_NORMAL_CHIP(pHalData->VersionID))
-			{
-				pszRadioAFile = sz88CRadioAFile;
-				pszRadioBFile = sz88CRadioBFile;
+			pszRadioAFile = sz88CRadioAFile;
+			pszRadioBFile = sz88CRadioBFile;
 #ifdef CONFIG_USB_HCI
-				if( BOARD_MINICARD == pHalData->BoardType)
-				{
-					pszRadioAFile = sz88CRadioAFile_mCard;
-					pszRadioBFile = sz88CRadioBFile_mCard;
-				}
-				else if( BOARD_USB_High_PA == pHalData->BoardType)
-				{
-					pszRadioAFile = sz88CRadioAFile_HP;
-				}
-#endif	
-			}
-			else
+			if( BOARD_MINICARD == pHalData->BoardType)
 			{
-				rtStatus = _FAIL;
-				return rtStatus;
+				pszRadioAFile = sz88CRadioAFile_mCard;
+				pszRadioBFile = sz88CRadioBFile_mCard;
 			}
+			else if( BOARD_USB_High_PA == pHalData->BoardType)
+			{
+				pszRadioAFile = sz88CRadioAFile_HP;
+			}
+#endif	
 		}
 	}
 	else if(IS_HARDWARE_TYPE_8723A(Adapter))

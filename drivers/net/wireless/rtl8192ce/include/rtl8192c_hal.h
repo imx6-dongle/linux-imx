@@ -492,6 +492,21 @@ typedef enum _RT_REGULATOR_MODE{
 	RT_LDO_REGULATOR = 1,	
 }RT_REGULATOR_MODE,*PRT_REGULATOR_MODE;
 
+enum c2h_id_8192c {
+	C2H_DBG = 0,
+	C2H_TSF = 1,
+	C2H_AP_RPT_RSP = 2,
+	C2H_CCX_TX_RPT = 3,
+	C2H_BT_RSSI = 4,
+	C2H_BT_OP_MODE = 5,
+	C2H_EXT_RA_RPT = 6,
+	C2H_HW_INFO_EXCH = 10,
+	C2H_C2H_H2C_TEST = 11,
+	C2H_BT_INFO = 12,
+	C2H_BT_MP_INFO = 15,
+	MAX_C2HEVENT
+};
+
 #ifdef CONFIG_PCI_HCI
 struct hal_data_8192ce
 {
@@ -881,11 +896,11 @@ u8 GetEEPROMSize8192C(PADAPTER Adapter);
 void rtl8192c_EfuseParseChnlPlan(PADAPTER padapter, u8 *hwinfo, BOOLEAN AutoLoadFail);
 VERSION_8192C rtl8192c_ReadChipVersion(IN PADAPTER Adapter);
 void rtl8192c_ReadBluetoothCoexistInfo(PADAPTER Adapter, u8 *PROMContent, BOOLEAN AutoloadFail);
-void rtl8192c_HalSetBrateCfg(PADAPTER Adapter, u8 *mBratesOS, u16 *pBrateCfg);
 //void rtl8192c_free_hal_data(_adapter * padapter);
 VOID rtl8192c_EfuseParseIDCode(PADAPTER pAdapter, u8 *hwinfo);
 void rtl8192c_set_hal_ops(struct hal_ops *pHalFunc);
 
+s32 c2h_id_filter_ccx_8192c(u8 id);
 #endif
 
 #ifdef CONFIG_MP_INCLUDED

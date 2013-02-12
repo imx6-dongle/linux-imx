@@ -18,13 +18,13 @@
  *
  ******************************************************************************/
 
-#define _HAL_INIT_C_
+#define _HAL_INTF_C_
 #include <drv_conf.h>
 #include <osdep_service.h>
 #include <drv_types.h>
 #include <rtw_byteorder.h>
 
-#include <hal_init.h>
+#include <hal_intf.h>
 
 #ifdef CONFIG_SDIO_HCI
 	#include <sdio_hal.h>
@@ -243,5 +243,18 @@ void rtw_hal_reset_security_engine(_adapter * adapter)
 {
 	if(adapter->HalFunc.hal_reset_security_engine)
 		adapter->HalFunc.hal_reset_security_engine(adapter);
+}
+
+s32 rtw_hal_c2h_handler(_adapter *adapter, struct c2h_evt_hdr *c2h_evt)
+{
+	s32 ret = _FAIL;
+	if (adapter->HalFunc.c2h_handler)
+		ret = adapter->HalFunc.c2h_handler(adapter, c2h_evt);
+	return ret;
+}
+
+c2h_id_filter rtw_hal_c2h_id_filter_ccx(_adapter *adapter)
+{
+	return adapter->HalFunc.c2h_id_filter_ccx;
 }
 
