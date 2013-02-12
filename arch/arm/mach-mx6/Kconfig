@@ -289,7 +289,7 @@ config USB_EHCI_ARC_H1
 
 config MX6_INTER_LDO_BYPASS
 	bool "Internal LDO in MX6Q/DL bypass"
-	depends on  REGULATOR_PFUZE100 && CPU_FREQ_IMX && ARCH_MX6
+	depends on  (REGULATOR_WM831X || REGULATOR_PFUZE100)  && CPU_FREQ_IMX && ARCH_MX6
 	default n
 	help
 	 This is choosed for bypass internal LDO in MX6. If choose it, internal

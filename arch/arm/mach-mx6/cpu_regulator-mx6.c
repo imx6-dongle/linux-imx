@@ -20,10 +20,15 @@
 #if defined(CONFIG_CPU_FREQ)
 #include <linux/cpufreq.h>
 #endif
+#include <linux/io.h>
+
 #include <asm/cpu.h>
 
 #include <mach/clock.h>
 #include <mach/hardware.h>
+#include "regs-anadig.h"
+#include "crm_regs.h"
+
 
 struct regulator *cpu_regulator;
 struct regulator *soc_regulator;
@@ -61,6 +66,8 @@ void mx6_cpu_regulator_init(void)
 {
 	int cpu;
 	u32 curr_cpu = 0;
+        unsigned int reg;
+        void __iomem *gpc_base = IO_ADDRESS(GPC_BASE_ADDR);
 
 	cpu_regulator = regulator_get(NULL, gp_reg_id);
 	if (IS_ERR(cpu_regulator))
@@ -73,6 +80,22 @@ void mx6_cpu_regulator_init(void)
 		} else {
 			curr_cpu = clk_get_rate(cpu_clk);
 			cpu_op_tbl = get_cpu_op(&cpu_op_nr);
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
+                               /*digital bypass VDDPU/VDDSOC/VDDARM*/
+                         reg = __raw_readl(ANADIG_REG_CORE);
+                         reg &= ~BM_ANADIG_REG_CORE_REG0_TRG;
+                         reg |= BF_ANADIG_REG_CORE_REG0_TRG(0x1f);
+                         reg &= ~BM_ANADIG_REG_CORE_REG1_TRG;
+                         reg |= BF_ANADIG_REG_CORE_REG1_TRG(0x1f);
+                         reg &= ~BM_ANADIG_REG_CORE_REG2_TRG;
+                         reg |= BF_ANADIG_REG_CORE_REG2_TRG(0x1f);
+                         __raw_writel(reg, ANADIG_REG_CORE);
+                        /* Mask the ANATOP brown out interrupt in the GPC. */
+                         reg = __raw_readl(gpc_base + 0x14);
+                         reg |= 0x80000000;
+                         __raw_writel(reg, gpc_base + 0x14);
+#endif
+
 			/* Set the core to max frequency requested. */
 			regulator_set_voltage(cpu_regulator,
 					      cpu_op_tbl[0].cpu_voltage,

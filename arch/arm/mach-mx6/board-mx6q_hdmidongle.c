@@ -202,11 +202,12 @@ static const struct spi_imx_master mx6q_hdmidongle_spi_data __initconst = {
 
 
 
-#if CONFIG_MFD_WM831X
-#if 0
+#ifdef CONFIG_MFD_WM831X
+
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
 // 1.4125, 1.4125. 1.5
-#define WM831X_DC1_ON_CONFIG_VAL            (0x48<<WM831X_DC1_ON_VSEL_SHIFT)
-#define WM831X_DC2_ON_CONFIG_VAL            (0x48<<WM831X_DC2_ON_VSEL_SHIFT)
+#define WM831X_DC1_ON_CONFIG_VAL            (0x40<<WM831X_DC1_ON_VSEL_SHIFT)
+#define WM831X_DC2_ON_CONFIG_VAL            (0x40<<WM831X_DC2_ON_VSEL_SHIFT)
 #define WM831X_DC3_ON_CONFIG_VAL            (0x1A<<WM831X_DC3_ON_VSEL_SHIFT)
 #else
 // 1.375, 1.375. 1.5
@@ -268,7 +269,71 @@ static int wm8326_post_init(struct wm831x *wm831x)
 	return 0;
 }
 
+
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
+static struct regulator_consumer_supply hdmidongle_vddarm_consumers[] = {
+        {
+                .supply     = "VDDCORE_DCDC1",
+        }
+};
+
+static struct regulator_consumer_supply hdmidongle_vddsoc_consumers[] = {
+        {
+                .supply     = "VDDSOC_DCDC2",
+        }
+};
+#endif
+
+#ifdef CONFIG_REGULATOR
+
+static struct regulator_init_data hdmidongle_vddarm_dcdc1 = {
+        .constraints = {
+                .name = "vdd_arm",
+                .min_uV = 100000,
+                .max_uV = 1500000,
+                .min_uA = 0,
+                .max_uA = 4000000,
+                .valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
+                .valid_modes_mask = 0,
+ //               .valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
+//                      REGULATOR_CHANGE_STATUS | REGULATOR_CHANGE_MODE,
+                .always_on = 1,
+                .boot_on = 1,
+        },
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
+        .num_consumer_supplies = ARRAY_SIZE(hdmidongle_vddarm_consumers),
+        .consumer_supplies = hdmidongle_vddarm_consumers,
+#endif
+};
+
+static struct regulator_init_data hdmidongle_vddsoc_dcdc2 = {
+        .constraints = {
+                .name = "vdd_soc",
+                .min_uV = 100000,
+                .max_uV = 1500000,
+                .valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
+                .valid_modes_mask = 0,
+                .always_on = 1,
+                .boot_on = 1,
+        },
+#ifdef CONFIG_MX6_INTER_LDO_BYPASS
+
+    .num_consumer_supplies = ARRAY_SIZE(hdmidongle_vddsoc_consumers),
+        .consumer_supplies = hdmidongle_vddsoc_consumers,
+#endif
+};
+
+#endif 
+
+
 static struct wm831x_pdata hdmidongle_wm8326_pdata = {
+#ifdef CONFIG_REGULATOR
+        .dcdc = {
+                &hdmidongle_vddarm_dcdc1,  /* DCDC1 */
+                &hdmidongle_vddsoc_dcdc2,  /* DCDC2 */
+                //&hdmidongle_vddmem_1v5_dcdc3, /* DCDC3 */
+        },
+#endif
 	.post_init = wm8326_post_init, 
 };
 #endif
@@ -551,7 +616,8 @@ static void __init imx6q_add_device_buttons(void) {}
 
 static struct mxc_dvfs_platform_data hdmidongle_dvfscore_data = {
 	#ifdef CONFIG_MX6_INTER_LDO_BYPASS
-	.reg_id = "VDDCORE",
+        .reg_id = "VDDCORE_DCDC1",
+        .soc_id = "VDDSOC_DCDC2",
 	#else
 	.reg_id = "cpu_vddgp",
 	.soc_id = "cpu_vddsoc",
