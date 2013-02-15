@@ -133,8 +133,7 @@ static const struct anatop_thermal_platform_data
 
 static inline void mx6q_hdmidongle_init_uart(void)
 {
-	if (board_is_mx6_reva())
-		imx6q_add_imx_uart(1, NULL);
+	imx6q_add_imx_uart(1, NULL);
 	imx6q_add_imx_uart(0, NULL);
 	imx6q_add_imx_uart(3, NULL);
 }
@@ -195,15 +194,15 @@ static void __init imx6q_hdmidongle_init_usb(void)
 	}
 	gpio_direction_output(HDMIDONGLE_USB_OTG_PWR, 0);
 	/* keep USB host1 VBUS always on */
-	if (board_is_mx6_reva()) {
-		ret = gpio_request(HDMIDONGLE_USB_H1_PWR, "usb-h1-pwr");
-		if (ret) {
-			pr_err("failed to get GPIO HDMIDONGLE_USB_H1_PWR: %d\n",
-				ret);
-			return;
-		}
-		gpio_direction_output(HDMIDONGLE_USB_H1_PWR, 1);
+	
+	ret = gpio_request(HDMIDONGLE_USB_H1_PWR, "usb-h1-pwr");
+	if (ret) {
+		pr_err("failed to get GPIO HDMIDONGLE_USB_H1_PWR: %d\n",
+			ret);
+		return;
 	}
+	gpio_direction_output(HDMIDONGLE_USB_H1_PWR, 1);
+	
 	mxc_iomux_set_gpr_register(1, 13, 1, 1);
 
 	mx6_set_otghost_vbus_func(imx6q_hdmidongle_usbotg_vbus);
@@ -387,10 +386,7 @@ static struct platform_device hdmidongle_revb_button_device = {
 
 static void __init imx6q_add_device_buttons(void)
 {
-	if (board_is_mx6_reva())
-		platform_device_register(&hdmidongle_reva_button_device);
-	else
-		platform_device_register(&hdmidongle_revb_button_device);
+	platform_device_register(&hdmidongle_reva_button_device);
 }
 #else
 static void __init imx6q_add_device_buttons(void) {}
@@ -510,7 +506,7 @@ static void __init mx6_hdmidongle_board_init(void)
 	imx6q_add_imx_snvs_rtc();
 
 	imx6q_add_imx_i2c(1, &mx6q_hdmidongle_i2c_data);
-    imx6q_add_imx_i2c(2, &mx6q_hdmidongle_i2c_data);
+	imx6q_add_imx_i2c(2, &mx6q_hdmidongle_i2c_data);
     
 	i2c_register_board_info(1, mxc_i2c1_board_info,
 			ARRAY_SIZE(mxc_i2c1_board_info));
@@ -529,18 +525,11 @@ static void __init mx6_hdmidongle_board_init(void)
 	imx6q_add_anatop_thermal_imx(1, &mx6q_hdmidongle_anatop_thermal_data);
 	imx6q_add_pm_imx(0, &mx6q_hdmidongle_pm_data);
 	/* Move sd3 to first because sd3 connect to emmc.
-	   Mfgtools want emmc is mmcblk0 and other sd card is mmcblk1.
-	
-	if (board_is_mx6_revc())
-		imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_revc_sd3_data);
-	else
-		imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd3_data);
-	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd2_data);
-	if (board_is_mx6_reva())
-		imx6q_add_sdhci_usdhc_imx(0, &mx6q_hdmidongle_sd1_data);*/
-	imx6q_add_sdhci_usdhc_imx(0, &mx6q_hdmidongle_sd1_data);
-	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd2_data);
-	imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd3_data);
+	   Mfgtools want emmc is mmcblk0 and other sd card is mmcblk1. */
+
+	imx6q_add_sdhci_usdhc_imx(3, &mx6q_hdmidongle_sd1_data);
+	imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd2_data);
+	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd3_data);
 	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
 	imx6q_hdmidongle_init_usb();
 
@@ -563,29 +552,21 @@ static void __init mx6_hdmidongle_board_init(void)
 	imx6q_add_hdmi_soc();
 	imx6q_add_hdmi_soc_dai();
 
-	if (board_is_mx6_reva()) {
-		gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
-		gpio_direction_output(HDMIDONGLE_BT_RST, 1);
-		gpio_set_value(HDMIDONGLE_BT_RST, 1);
-		msleep(1000);
-		gpio_request(HDMIDONGLE_BT_EN, "bt_en");
-		gpio_direction_output(HDMIDONGLE_BT_EN, 1);
-		gpio_set_value(HDMIDONGLE_BT_EN, 1);
+	gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
+	gpio_direction_output(HDMIDONGLE_BT_RST, 1);
+	gpio_set_value(HDMIDONGLE_BT_RST, 1);
+	msleep(1000);
 
-		msleep(1000);
-		gpio_request(HDMIDONGLE_WL_EN, "wl_en");
-		gpio_direction_output(HDMIDONGLE_WL_EN, 1);
-		gpio_set_value(HDMIDONGLE_WL_EN, 1);
-		msleep(1000);
-	}
-	else if (board_is_mx6_revb() || board_is_mx6_revc()) {
-		/* Add PCIe RC interface support */
-#ifdef CONFIG_IMX_PCIE
-		imx6q_add_pcie(&mx6_hdmidongle_pcie_data);
-		wake_lock_init(&pcie_wake_lock, WAKE_LOCK_SUSPEND, "pcie_workaround");
-		wake_lock(&pcie_wake_lock);
-#endif
-	}
+	gpio_request(HDMIDONGLE_BT_EN, "bt_en");
+	gpio_direction_output(HDMIDONGLE_BT_EN, 1);
+	gpio_set_value(HDMIDONGLE_BT_EN, 1);
+	msleep(1000);
+
+	gpio_request(HDMIDONGLE_WL_EN, "wl_en");
+	gpio_direction_output(HDMIDONGLE_WL_EN, 1);
+	gpio_set_value(HDMIDONGLE_WL_EN, 1);
+	msleep(1000);
+
 	pm_power_off = mx6_snvs_poweroff;
 	imx6q_add_busfreq();
 }
