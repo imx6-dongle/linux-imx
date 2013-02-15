@@ -33,9 +33,6 @@
 #include <linux/i2c.h>
 #include <linux/i2c/pca953x.h>
 #include <linux/ata.h>
-#include <linux/mtd/mtd.h>
-#include <linux/mtd/map.h>
-#include <linux/mtd/partitions.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pmic_external.h>
 #include <linux/pmic_status.h>
@@ -45,7 +42,6 @@
 #include <linux/fec.h>
 #include <linux/memblock.h>
 #include <linux/gpio.h>
-#include <linux/ion.h>
 #include <linux/etherdevice.h>
 #include <linux/regulator/anatop-regulator.h>
 #include <linux/regulator/consumer.h>
@@ -68,17 +64,6 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/time.h>
-
-#ifdef CONFIG_IMX_PCIE
-#include <linux/wakelock.h>
-#endif
-
-#ifdef  CONFIG_MFD_WM831X
-#include <linux/mfd/wm831x/core.h>
-#include <linux/mfd/wm831x/pdata.h>
-#include <linux/mfd/wm831x/regulator.h>
-#include <linux/mfd/wm831x/gpio.h>
-#endif
 
 #include "usb.h"
 #include "devices-imx6q.h"
@@ -141,43 +126,6 @@ static const struct esdhc_platform_data mx6q_hdmidongle_revc_sd3_data __initcons
 	.cd_type = ESDHC_CD_PERMANENT,
 };
 
-
-static int __init gpmi_nand_platform_init(void)
-{
-	iomux_v3_cfg_t *nand_pads = NULL;
-	u32 nand_pads_cnt;
-
-	if (cpu_is_mx6q()) {
-		nand_pads = mx6q_gpmi_nand;
-		nand_pads_cnt = ARRAY_SIZE(mx6q_gpmi_nand);
-	} else if (cpu_is_mx6dl()) {
-		nand_pads = mx6dl_gpmi_nand;
-		nand_pads_cnt = ARRAY_SIZE(mx6dl_gpmi_nand);
-
-	}
-	BUG_ON(!nand_pads);
-	return mxc_iomux_v3_setup_multiple_pads(nand_pads, nand_pads_cnt);
-}
-
-static struct gpmi_nand_platform_data
-mx6_gpmi_nand_platform_data __initdata = {
-	.platform_init           = gpmi_nand_platform_init,
-	.min_prop_delay_in_ns    = 5,
-	.max_prop_delay_in_ns    = 9,
-	.max_chip_count          = 1,
-	.enable_bbt              = 1,
-	.enable_ddr              = 0,
-};
-
-static int __init board_support_onfi_nand(char *p)
-{
-	mx6_gpmi_nand_platform_data.enable_ddr = 1;
-	return 0;
-}
-
-early_param("onfi_support", board_support_onfi_nand);
-
-
 static const struct anatop_thermal_platform_data
 	mx6q_hdmidongle_anatop_thermal_data __initconst = {
 		.name = "anatop_thermal",
@@ -200,98 +148,10 @@ static const struct spi_imx_master mx6q_hdmidongle_spi_data __initconst = {
 	.num_chipselect = ARRAY_SIZE(mx6q_hdmidongle_spi_cs),
 };
 
-
-
-#if CONFIG_MFD_WM831X
-#if 0
-// 1.4125, 1.4125. 1.5
-#define WM831X_DC1_ON_CONFIG_VAL            (0x48<<WM831X_DC1_ON_VSEL_SHIFT)
-#define WM831X_DC2_ON_CONFIG_VAL            (0x48<<WM831X_DC2_ON_VSEL_SHIFT)
-#define WM831X_DC3_ON_CONFIG_VAL            (0x1A<<WM831X_DC3_ON_VSEL_SHIFT)
-#else
-// 1.375, 1.375. 1.5
-
-#define WM831X_DC1_ON_CONFIG_VAL            (0x44<<WM831X_DC1_ON_VSEL_SHIFT)
-#define WM831X_DC2_ON_CONFIG_VAL            (0x44<<WM831X_DC2_ON_VSEL_SHIFT)
-#define WM831X_DC3_ON_CONFIG_VAL            (0x1A<<WM831X_DC3_ON_VSEL_SHIFT)
-
-#endif
-
-#define WM831X_DC1_DVS_MODE_VAL             (0x02<<WM831X_DC1_DVS_SRC_SHIFT)
-#define WM831X_DC2_DVS_MODE_VAL             (0x02<<WM831X_DC2_DVS_SRC_SHIFT)
-
-#define WM831X_DC1_DVS_CONTROL_VAL           (0x20<<WM831X_DC1_DVS_VSEL_SHIFT)
-#define WM831X_DC2_DVS_CONTROL_VAL           (0x20<<WM831X_DC2_DVS_VSEL_SHIFT)
-
-#define WM831X_DC1_DVS_MASK                  (WM831X_DC1_DVS_SRC_MASK|WM831X_DC1_DVS_VSEL_MASK)
-#define WM831X_DC2_DVS_MASK                  (WM831X_DC2_DVS_SRC_MASK|WM831X_DC1_DVS_VSEL_MASK)
-
-#define WM831X_DC1_DVS_VAL                   (WM831X_DC1_DVS_MODE_VAL|WM831X_DC1_DVS_CONTROL_VAL)
-#define WM831X_DC2_DVS_VAL                   (WM831X_DC2_DVS_MODE_VAL|WM831X_DC2_DVS_CONTROL_VAL)
-
-#define WM831X_GPN_FN_VAL_HW_EN              (0x0A<<WM831X_GPN_FN_SHIFT)
-#define WM831X_GPN_FN_VAL_HW_CTL             (0x0C<<WM831X_GPN_FN_SHIFT)
-#define WM831X_GPN_FN_VAL_DVS1               (0x08<<WM831X_GPN_FN_SHIFT)
-
-#define WM831X_GPN_DIR_VAL                   (0x1<<WM831X_GPN_DIR_SHIFT)
-#define WM831X_GPN_PULL_VAL                  (0x3<<WM831X_GPN_PULL_SHIFT)
-#define WM831X_GPN_INT_MODE_VAL              (0x1<<WM831X_GPN_INT_MODE_SHIFT)
-#define WM831X_GPN_POL_VAL                   (0x1<<WM831X_GPN_POL_SHIFT)
-#define WM831X_GPN_ENA_VAL                   (0x1<<WM831X_GPN_ENA_SHIFT)
-
-#define  WM831X_GPIO7_8_9_MASK               (WM831X_GPN_DIR_MASK|WM831X_GPN_INT_MODE_MASK|WM831X_GPN_PULL_MASK|WM831X_GPN_POL_MASK|WM831X_GPN_FN_MASK)                     
-
-
-#define WM831X_GPIO7_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_HW_EN)        
-#define WM831X_GPIO8_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_HW_CTL)        
-#define WM831X_GPIO9_VAL                     (WM831X_GPN_DIR_VAL|WM831X_GPN_PULL_VAL|WM831X_GPN_INT_MODE_VAL|WM831X_GPN_POL_VAL|WM831X_GPN_ENA_VAL|WM831X_GPN_FN_VAL_DVS1)  
-
-#define WM831X_STATUS_LED_MASK                0xC000
-#define WM831X_STATUS_LED_ON                  (0x1 << 14)
-#define WM831X_STATUS_LED_OFF                 (0x0 << 14)
-
-static int wm8326_post_init(struct wm831x *wm831x)
-{
-	wm831x_set_bits(wm831x, WM831X_DC1_ON_CONFIG, WM831X_DC1_ON_VSEL_MASK, WM831X_DC1_ON_CONFIG_VAL);
-	wm831x_set_bits(wm831x, WM831X_DC2_ON_CONFIG, WM831X_DC2_ON_VSEL_MASK, WM831X_DC2_ON_CONFIG_VAL);
-	wm831x_set_bits(wm831x, WM831X_DC3_ON_CONFIG, WM831X_DC3_ON_VSEL_MASK, WM831X_DC3_ON_CONFIG_VAL);
-	
-	wm831x_set_bits(wm831x, WM831X_DC1_DVS_CONTROL, WM831X_DC1_DVS_MASK, WM831X_DC1_DVS_VAL);
-	wm831x_set_bits(wm831x, WM831X_DC2_DVS_CONTROL, WM831X_DC2_DVS_MASK, WM831X_DC2_DVS_VAL);
-	
-	wm831x_set_bits(wm831x, WM831X_GPIO7_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO7_VAL);
-	wm831x_set_bits(wm831x, WM831X_GPIO8_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO8_VAL);
-	wm831x_set_bits(wm831x, WM831X_GPIO9_CONTROL, WM831X_GPIO7_8_9_MASK, WM831X_GPIO9_VAL);
-	
-    wm831x_set_bits(wm831x, WM831X_STATUS_LED_1 , WM831X_STATUS_LED_MASK, WM831X_STATUS_LED_OFF);
-    wm831x_set_bits(wm831x, WM831X_STATUS_LED_2 , WM831X_STATUS_LED_MASK, WM831X_STATUS_LED_ON);
-	return 0;
-}
-
-static struct wm831x_pdata hdmidongle_wm8326_pdata = {
-	.post_init = wm8326_post_init, 
-};
-#endif
-
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
-	{
-#if CONFIG_MFD_WM831X
-	I2C_BOARD_INFO("wm8326", 0x34),
-	.platform_data = &hdmidongle_wm8326_pdata,
-#endif
-	},
 };
 
 static struct spi_board_info wm8326_spi1_board_info[] __initdata = {
-#if defined(CONFIG_MFD_WM831X_SPI)
-	{
-	/* The modalias must be the same as spi device driver name */
-	.modalias	= "wm8326",
-	.max_speed_hz	= 20000000,
-	.bus_num	= 1,
-	.chip_select	= 0,
-	},
-#endif
 };
 
 static void spi_device_init(void)
@@ -347,7 +207,6 @@ static void __init imx6q_hdmidongle_init_usb(void)
 	mxc_iomux_set_gpr_register(1, 13, 1, 1);
 
 	mx6_set_otghost_vbus_func(imx6q_hdmidongle_usbotg_vbus);
-	mx6_usb_dr_init();
 }
 
 
@@ -433,18 +292,6 @@ static struct imx_ipuv3_platform_data ipu_data[] = {
 	}, {
 	.rev = 4,
 	.csi_clk[0] = "clko_clk",
-	},
-};
-
-static struct ion_platform_data imx_ion_data = {
-	.nr = 1,
-	.heaps = {
-		{
-		.id = 0,
-		.type = ION_HEAP_TYPE_CARVEOUT,
-		.name = "vpu_ion",
-		.size = SZ_64M,
-		},
 	},
 };
 
@@ -717,16 +564,11 @@ static void __init mx6_hdmidongle_board_init(void)
 	imx6q_add_viim();
 	imx6q_add_imx2_wdt(0, NULL);
 	imx6q_add_dma();
-	if (board_is_mx6_revb() || board_is_mx6_revc())
-		imx6q_add_gpmi(&mx6_gpmi_nand_platform_data);
 
 	imx6q_add_dvfs_core(&hdmidongle_dvfscore_data);
 	#ifndef CONFIG_MX6_INTER_LDO_BYPASS
 	mx6_cpu_regulator_init();
 	#endif
-
-	imx6q_add_ion(0, &imx_ion_data,
-		sizeof(imx_ion_data) + sizeof(struct ion_platform_heap));
 	
 	imx6q_add_device_buttons();
 
@@ -789,13 +631,6 @@ static void __init mx6q_hdmidongle_reserve(void)
 					   SZ_4K, SZ_1G);
 		memblock_remove(phys, imx6q_gpu_pdata.reserved_mem_size);
 		imx6q_gpu_pdata.reserved_mem_base = phys;
-	}
-#endif
-#if defined(CONFIG_ION)
-	if (imx_ion_data.heaps[0].size) {
-		phys = memblock_alloc(imx_ion_data.heaps[0].size, SZ_4K);
-		memblock_remove(phys, imx_ion_data.heaps[0].size);
-		imx_ion_data.heaps[0].base = phys;
 	}
 #endif
 
