@@ -478,22 +478,7 @@ static void __init mx6_hdmidongle_board_init(void)
 {
 	int i;
 
-	if (cpu_is_mx6q()) {
-		if (board_is_mx6_revb() || board_is_mx6_revc())
-			mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_rev_b_pads,
-				ARRAY_SIZE(mx6q_hdmidongle_rev_b_pads));
-		else
-			mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_rev_a_pads,
-				ARRAY_SIZE(mx6q_hdmidongle_rev_a_pads));
-	}
-	else if (cpu_is_mx6dl()) {
-		if (board_is_mx6_revb() || board_is_mx6_revc())
-			mxc_iomux_v3_setup_multiple_pads(mx6dl_hdmidongle_rev_b_pads,
-				ARRAY_SIZE(mx6dl_hdmidongle_rev_b_pads));
-		else
-			mxc_iomux_v3_setup_multiple_pads(mx6dl_hdmidongle_rev_a_pads,
-				ARRAY_SIZE(mx6dl_hdmidongle_rev_a_pads));
-	}
+	mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_rev_a_pads, ARRAY_SIZE(mx6q_hdmidongle_rev_a_pads));
 
 	gp_reg_id = hdmidongle_dvfscore_data.reg_id;
 	soc_reg_id = hdmidongle_dvfscore_data.soc_id;
@@ -545,14 +530,17 @@ static void __init mx6_hdmidongle_board_init(void)
 	imx6q_add_pm_imx(0, &mx6q_hdmidongle_pm_data);
 	/* Move sd3 to first because sd3 connect to emmc.
 	   Mfgtools want emmc is mmcblk0 and other sd card is mmcblk1.
-	*/
+	
 	if (board_is_mx6_revc())
 		imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_revc_sd3_data);
 	else
 		imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd3_data);
 	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd2_data);
 	if (board_is_mx6_reva())
-		imx6q_add_sdhci_usdhc_imx(0, &mx6q_hdmidongle_sd1_data);
+		imx6q_add_sdhci_usdhc_imx(0, &mx6q_hdmidongle_sd1_data);*/
+	imx6q_add_sdhci_usdhc_imx(0, &mx6q_hdmidongle_sd1_data);
+	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd2_data);
+	imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd3_data);
 	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
 	imx6q_hdmidongle_init_usb();
 
