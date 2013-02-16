@@ -67,7 +67,8 @@ typedef struct _ADAPTER _adapter, ADAPTER,*PADAPTER;
 #include <wlan_bssdef.h>
 #include <rtw_xmit.h>
 #include <rtw_recv.h>
-#include <hal_init.h>
+#include <hal_intf.h>
+#include <hal_com.h>
 #include <rtw_qos.h>
 #include <rtw_security.h>
 #include <rtw_pwrctrl.h>
@@ -82,6 +83,7 @@ typedef struct _ADAPTER _adapter, ADAPTER,*PADAPTER;
 #include <rtw_mlme_ext.h>
 #include <rtw_p2p.h>
 #include <rtw_tdls.h>
+#include <rtw_ap.h>
 
 #ifdef CONFIG_DRVEXT_MODULE
 #include <drvext_api.h>
@@ -198,7 +200,7 @@ struct registry_priv
 #ifdef CONFIG_IOL
 	bool force_iol; //enable iol without other concern
 #endif
-
+	u8  special_rf_path; //0: 2T2R ,1: only turn on path A 1T1R, 2: only turn on path B 1T1R
 	u8	mac_phy_mode; //0:by efuse, 1:smsp, 2:dmdp, 3:dmsp.
 
 #ifdef CONFIG_80211D
@@ -228,11 +230,14 @@ struct registry_priv
 
 struct dvobj_priv
 {
-	PADAPTER padapter;
+	_adapter *if1;
+	_adapter *if2;
 
 	//For 92D, DMDP have 2 interface.
 	u8	InterfaceNumber;
 	u8	NumInterfaces;
+	u8	DualMacMode;
+	u8	irq_alloc;
 
 /*-------- below is for SDIO INTERFACE --------*/
 
@@ -319,7 +324,6 @@ struct dvobj_priv
 
 	u16	irqline;
 	u8	irq_enabled;
-	u8	irq_alloc;
 	RT_ISR_CONTENT	isr_content;
 	_lock	irq_th_lock;
 
@@ -334,10 +338,30 @@ struct dvobj_priv
 	u8 	const_devicepci_aspm_setting;
 	u8 	b_support_aspm; // If it supports ASPM, Offset[560h] = 0x40, otherwise Offset[560h] = 0x00.
 	u8	b_support_backdoor;
+	u8 bdma64;
 #endif//PLATFORM_LINUX
 
 #endif//CONFIG_PCI_HCI
 };
+
+#ifdef PLATFORM_LINUX
+static struct device *dvobj_to_dev(struct dvobj_priv *dvobj)
+{
+	/* todo: get interface type from dvobj and the return the dev accordingly */
+#ifdef RTW_DVOBJ_CHIP_HW_TYPE
+#endif
+
+#ifdef CONFIG_USB_HCI
+	return &dvobj->pusbintf->dev;
+#endif
+#ifdef CONFIG_SDIO_HCI
+	return &dvobj->intf_data.func->dev;
+#endif
+#ifdef CONFIG_PCI_HCI
+	return &dvobj->ppcidev->dev;
+#endif
+}
+#endif
 
 
 enum _IFACE_TYPE {
@@ -411,7 +435,7 @@ struct _ADAPTER{
 	u16	HardwareType;
 	u16	interface_type;//USB,SDIO,PCI
 
-	struct 	dvobj_priv dvobjpriv;
+	struct dvobj_priv *dvobj;
 	struct	mlme_priv mlmepriv;
 	struct	mlme_ext_priv mlmeextpriv;
 	struct	cmd_priv	cmdpriv;
@@ -422,8 +446,7 @@ struct _ADAPTER{
 	struct	recv_priv	recvpriv;
 	struct	sta_priv	stapriv;
 	struct	security_priv	securitypriv;
-	struct	registry_priv	registrypriv;
-	struct	wlan_acl_pool	acl_list;
+	struct	registry_priv	registrypriv;	
 	struct	pwrctrl_priv	pwrctrlpriv;
 	struct 	eeprom_priv eeprompriv;
 	struct	led_priv	ledpriv;
@@ -478,14 +501,15 @@ struct _ADAPTER{
 	u8	init_adpt_in_progress;
 	u8	bHaltInProgress;
 
-	_thread_hdl_	cmdThread;
-	_thread_hdl_	evtThread;
-	_thread_hdl_	xmitThread;
-	_thread_hdl_	recvThread;
+	_thread_hdl_ cmdThread;
+	_thread_hdl_ evtThread;
+	_thread_hdl_ xmitThread;
+	_thread_hdl_ recvThread;
 
-
-	NDIS_STATUS (*dvobj_init)(_adapter * adapter);
-	void (*dvobj_deinit)(_adapter * adapter);
+#ifndef PLATFORM_LINUX
+	NDIS_STATUS (*dvobj_init)(struct dvobj_priv	*dvobj);
+	void (*dvobj_deinit)(struct dvobj_priv *dvobj);
+#endif
 
 	void (*intf_start)(_adapter * adapter);
 	void (*intf_stop)(_adapter * adapter);
@@ -534,6 +558,9 @@ struct _ADAPTER{
 	u8 bReadPortCancel;
 	u8 bWritePortCancel;
 	u8 bRxRSSIDisplay;
+	//	Added by Albert 2012/07/26
+	//	The driver will write the initial gain everytime when running in the DM_Write_DIG function.
+	u8 bForceWriteInitGain;
 #ifdef CONFIG_AUTOSUSPEND
 	u8	bDisableAutosuspend;
 #endif
@@ -585,6 +612,10 @@ struct _ADAPTER{
 #endif
 
 };
+
+#define adapter_to_dvobj(adapter) (adapter->dvobj)
+
+int rtw_handle_dualmac(_adapter *adapter, bool init);
 
 __inline static u8 *myid(struct eeprom_priv *peepriv)
 {

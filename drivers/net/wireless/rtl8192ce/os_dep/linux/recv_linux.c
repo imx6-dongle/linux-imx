@@ -65,7 +65,7 @@ int rtw_os_recvbuf_resource_alloc(_adapter *padapter, struct recv_buf *precvbuf)
 	int res=_SUCCESS;
 
 #ifdef CONFIG_USB_HCI
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct usb_device	*pusbd = pdvobjpriv->pusbdev;
 
 	precvbuf->irp_pending = _FALSE;
@@ -107,7 +107,7 @@ int rtw_os_recvbuf_resource_free(_adapter *padapter, struct recv_buf *precvbuf)
 
 #ifdef CONFIG_USE_USB_BUFFER_ALLOC_RX
 
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct usb_device	*pusbd = pdvobjpriv->pusbdev;
 
 	rtw_usb_buffer_free(pusbd, (size_t)precvbuf->alloc_sz, precvbuf->pallocated_buf, precvbuf->dma_transfer_addr);
@@ -277,11 +277,7 @@ _func_enter_;
 
 	skb->data = precv_frame->u.hdr.rx_data;
 
-#ifdef NET_SKBUFF_DATA_USES_OFFSET
 	skb_set_tail_pointer(skb, precv_frame->u.hdr.len);
-#else
-	skb->tail = precv_frame->u.hdr.rx_tail;
-#endif
 
 	skb->len = precv_frame->u.hdr.len;
 
@@ -311,14 +307,18 @@ _func_enter_;
 
 			if(psta)
 			{
+				struct net_device *pnetdev= (struct net_device*)padapter->pnetdev;			
+
 				//DBG_871X("directly forwarding to the rtw_xmit_entry\n");
 
 				//skb->ip_summed = CHECKSUM_NONE;
-				//skb->protocol = eth_type_trans(skb, pnetdev);
-
-				skb->dev = padapter->pnetdev;
-				rtw_xmit_entry(skb, padapter->pnetdev);
-
+				skb->dev = pnetdev;			
+#if (LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,35))
+				skb_set_queue_mapping(skb, rtw_recv_select_queue(skb));
+#endif //LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,35)
+			
+				rtw_xmit_entry(skb, pnetdev);
+			
 				if(bmcast)
 					skb = pskb2;
 				else
@@ -398,9 +398,6 @@ _recv_indicatepkt_drop:
 	 //enqueue back to free_recv_queue
 	 if(precv_frame)
 		 rtw_free_recvframe(precv_frame, pfree_recv_queue);
-
-
- 	 precvpriv->rx_drop++;
 
 	 return _FAIL;
 

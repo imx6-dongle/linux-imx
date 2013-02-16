@@ -103,7 +103,7 @@
 	#define	_MODULE_DEFINE_	_module_rtl871x_security_c_
 #elif defined _RTW_EEPROM_C_
 	#define	_MODULE_DEFINE_	_module_rtl871x_eeprom_c_
-#elif defined _HAL_INIT_C_
+#elif defined _HAL_INTF_C_
 	#define	_MODULE_DEFINE_	_module_hal_init_c_
 #elif defined _HCI_HAL_INIT_C_
 	#define	_MODULE_DEFINE_	_module_hci_hal_init_c_

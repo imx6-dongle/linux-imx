@@ -94,7 +94,7 @@ u32	_rtw_init_sta_priv(struct	sta_priv *pstapriv)
 {
 	struct sta_info *psta;
 	s32 i;
-	
+
 _func_enter_;	
 
 	pstapriv->pallocated_stainfo_buf = rtw_zvmalloc (sizeof(struct sta_info) * NUM_STA+ 4);
@@ -128,6 +128,8 @@ _func_enter_;
 		psta++;
 	}
 
+	
+
 #ifdef CONFIG_AP_MODE
 
 	pstapriv->sta_dz_bitmap = 0;
@@ -146,7 +148,7 @@ _func_enter_;
 	pstapriv->expire_to = 60;// 60*2 = 120 sec = 2 min, expire after no any traffic.
 	
 	pstapriv->max_num_sta = NUM_STA;
-	
+		
 #endif
 	
 _func_exit_;		
@@ -228,6 +230,10 @@ _func_exit_;
 void rtw_mfree_sta_priv_lock(struct	sta_priv *pstapriv);
 void rtw_mfree_sta_priv_lock(struct	sta_priv *pstapriv)
 {
+#ifdef CONFIG_AP_MODE
+	struct wlan_acl_pool *pacl_list = &pstapriv->acl_list;
+#endif
+
 	 rtw_mfree_all_stainfo(pstapriv); //be done before free sta_hash_lock
 
 	_rtw_spinlock_free(&pstapriv->free_sta_queue.lock);
@@ -238,7 +244,8 @@ void rtw_mfree_sta_priv_lock(struct	sta_priv *pstapriv)
 
 #ifdef CONFIG_AP_MODE
 	_rtw_spinlock_free(&pstapriv->asoc_list_lock);
-	_rtw_spinlock_free(&pstapriv->auth_list_lock);	
+	_rtw_spinlock_free(&pstapriv->auth_list_lock);
+	_rtw_spinlock_free(&pacl_list->acl_node_q.lock);
 #endif
 
 }
@@ -369,6 +376,8 @@ _func_enter_;
 		psta->rssi_stat.UndecoratedSmoothedPWDB = 0;
 		psta->rssi_stat.UndecoratedSmoothedCCK = (-1);
 		
+		/* init for the sequence number of received management frame */
+		psta->RxMgmtFrameSeqNum = 0xffff;
 	}
 	
 exit:
@@ -715,8 +724,54 @@ _func_exit_;
 
 }
 
-u8 rtw_access_ctrl(struct wlan_acl_pool* pacl_list, u8 * mac_addr)
+u8 rtw_access_ctrl(_adapter *padapter, u8 *mac_addr)
 {
-	return _TRUE;
+	u8 res = _TRUE;
+#ifdef  CONFIG_AP_MODE
+	_irqL irqL;
+	_list	*plist, *phead;
+	struct rtw_wlan_acl_node *paclnode;
+	u8 match = _FALSE;
+	struct sta_priv *pstapriv = &padapter->stapriv;
+	struct wlan_acl_pool *pacl_list = &pstapriv->acl_list;
+	_queue	*pacl_node_q =&pacl_list->acl_node_q;
+	
+	_enter_critical_bh(&(pacl_node_q->lock), &irqL);
+	phead = get_list_head(pacl_node_q);
+	plist = get_next(phead);		
+	while ((rtw_end_of_queue_search(phead, plist)) == _FALSE)
+	{
+		paclnode = LIST_CONTAINOR(plist, struct rtw_wlan_acl_node, list);
+		plist = get_next(plist);
+
+		if(_rtw_memcmp(paclnode->addr, mac_addr, ETH_ALEN))
+		{
+			if(paclnode->valid == _TRUE)
+			{
+				match = _TRUE;
+				break;
+			}
+		}		
+	}	
+	_exit_critical_bh(&(pacl_node_q->lock), &irqL);
+	
+
+	if(pacl_list->mode == 1)//accept unless in deny list
+	{
+		res = (match == _TRUE) ?  _FALSE:_TRUE;
+	}	
+	else if(pacl_list->mode == 2)//deny unless in accept list
+	{
+		res = (match == _TRUE) ?  _TRUE:_FALSE;
+	}
+	else
+	{
+		 res = _TRUE;
+	}		
+	
+#endif
+
+	return res;
+
 }
 

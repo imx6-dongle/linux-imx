@@ -31,7 +31,7 @@
 #include <drv_types.h>
 #include <xmit_osdep.h>
 #include <recv_osdep.h>
-#include <hal_init.h>
+#include <hal_intf.h>
 #include <rtw_ioctl.h>
 #include <rtw_version.h>
 
@@ -127,6 +127,9 @@ int rtw_wifi_spec = 1;//for wifi test
 #else
 int rtw_wifi_spec = 0;
 #endif
+
+int rtw_special_rf_path = 0; //0: 2T2R ,1: only turn on path A 1T1R, 2: only turn on path B 1T1R
+
 int rtw_channel_plan = RT_CHANNEL_DOMAIN_MAX;
 
 #ifdef CONFIG_BT_COEXIST
@@ -204,6 +207,8 @@ module_param(rtw_rf_config, int, 0644);
 module_param(rtw_power_mgnt, int, 0644);
 module_param(rtw_low_power, int, 0644);
 module_param(rtw_wifi_spec, int, 0644);
+
+module_param(rtw_special_rf_path, int, 0644);
 
 module_param(rtw_antdiv_cfg, int, 0644);
 
@@ -758,7 +763,7 @@ _func_enter_;
 
 	
 	registry_par->wifi_spec = (u8)rtw_wifi_spec;
-
+	registry_par->special_rf_path = (u8)rtw_special_rf_path;
 	registry_par->channel_plan = (u8)rtw_channel_plan;
 
 #ifdef CONFIG_BT_COEXIST
@@ -787,6 +792,9 @@ _func_enter_;
 
 #ifdef CONFIG_LAYER2_ROAMING
 	registry_par->max_roaming_times = (u8)rtw_max_roaming_times;
+#ifdef CONFIG_INTEL_WIDI
+	registry_par->max_roaming_times = (u8)rtw_max_roaming_times + 2;
+#endif // CONFIG_INTEL_WIDI
 #endif
 
 #ifdef CONFIG_IOL
@@ -891,6 +899,35 @@ static u16 rtw_select_queue(struct net_device *dev, struct sk_buff *skb)
 
 	return rtw_1d_to_queue[skb->priority];
 }
+
+u16 rtw_recv_select_queue(struct sk_buff *skb)
+{
+	struct iphdr *piphdr;
+	unsigned int dscp;
+	u16	eth_type;
+	u32 priority;
+	u8 *pdata = skb->data;
+
+	_rtw_memcpy(&eth_type, pdata+(ETH_ALEN<<1), 2);
+
+	switch (eth_type) {
+		case htons(ETH_P_IP):
+
+			piphdr = (struct iphdr *)(pdata+ETH_HLEN);
+
+			dscp = piphdr->tos & 0xfc;
+			
+			priority = dscp >> 5;
+			
+			break;
+		default:
+			priority = 0;
+	}
+
+	return rtw_1d_to_queue[priority];
+	
+}
+
 #endif
 
 #if (LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,29))
@@ -939,10 +976,10 @@ int rtw_init_netdev_name(struct net_device *pnetdev, const char *ifname)
 			
 			dev_put(TargetNetdev);
 			unregister_netdev(TargetNetdev);
-#ifdef CONFIG_PROC_DEBUG
+
 			if(TargetAdapter->chip_type == padapter->chip_type)
 				rtw_proc_remove_one(TargetNetdev);
-#endif
+
 			padapter->DriverState = DRIVER_REPLACE_DONGLE;
 		}
 	}
@@ -1001,7 +1038,9 @@ struct net_device *rtw_init_netdev(_adapter *old_padapter)
 #endif	
 	//pnetdev->tx_timeout = NULL;
 	pnetdev->watchdog_timeo = HZ*3; /* 3 second timeout */
+#ifdef CONFIG_WIRELESS_EXT
 	pnetdev->wireless_handlers = (struct iw_handler_def *)&rtw_handlers_def;
+#endif
 
 #ifdef WIRELESS_SPY
 	//priv->wireless_data.spy_data = &priv->spy_data;
@@ -1022,27 +1061,32 @@ u32 rtw_start_drv_threads(_adapter *padapter)
 
 	RT_TRACE(_module_os_intfs_c_,_drv_info_,("+rtw_start_drv_threads\n"));
 #ifdef CONFIG_XMIT_THREAD_MODE
-	padapter->xmitThread = kernel_thread(rtw_xmit_thread, padapter, CLONE_FS|CLONE_FILES);
-	if(padapter->xmitThread < 0)
+	padapter->xmitThread = kthread_run(rtw_xmit_thread, padapter, "RTW_XMIT_THREAD");
+	if(IS_ERR(padapter->xmitThread))
 		_status = _FAIL;
 #endif
 
 #ifdef CONFIG_RECV_THREAD_MODE
-	padapter->recvThread = kernel_thread(rtw_recv_thread, padapter, CLONE_FS|CLONE_FILES);
-	if(padapter->recvThread < 0)
+	padapter->recvThread = kthread_run(rtw_recv_thread, padapter, "RTW_RECV_THREAD");
+	if(IS_ERR(padapter->recvThread))
 		_status = _FAIL;	
 #endif
 
-	padapter->cmdThread = kernel_thread(rtw_cmd_thread, padapter, CLONE_FS|CLONE_FILES);
-	if(padapter->cmdThread < 0)
-		_status = _FAIL;
-	else
-		_rtw_down_sema(&padapter->cmdpriv.terminate_cmdthread_sema); //wait for cmd_thread to run
+#ifdef CONFIG_CONCURRENT_MODE
+	if(padapter->isprimary == _TRUE)
+#endif //CONFIG_CONCURRENT_MODE
+	{
+		padapter->cmdThread = kthread_run(rtw_cmd_thread, padapter, "RTW_CMD_THREAD");
+		if(IS_ERR(padapter->cmdThread))
+			_status = _FAIL;
+		else
+			_rtw_down_sema(&padapter->cmdpriv.terminate_cmdthread_sema); //wait for cmd_thread to run
+	}
 		
 
 #ifdef CONFIG_EVENT_THREAD_MODE
-	padapter->evtThread = kernel_thread(event_thread, padapter, CLONE_FS|CLONE_FILES);
-	if(padapter->evtThread < 0)
+	padapter->evtThread = kthread_run(event_thread, padapter, "RTW_EVENT_THREAD");
+	if(IS_ERR(padapter->evtThread))
 		_status = _FAIL;		
 #endif
 
@@ -1054,12 +1098,17 @@ void rtw_stop_drv_threads (_adapter *padapter)
 {
 	RT_TRACE(_module_os_intfs_c_,_drv_info_,("+rtw_stop_drv_threads\n"));	
 
-	//Below is to termindate rtw_cmd_thread & event_thread...
-	_rtw_up_sema(&padapter->cmdpriv.cmd_queue_sema);
-	//_rtw_up_sema(&padapter->cmdpriv.cmd_done_sema);
-	if(padapter->cmdThread){
-		_rtw_down_sema(&padapter->cmdpriv.terminate_cmdthread_sema);
-	}
+#ifdef CONFIG_CONCURRENT_MODE
+	if(padapter->isprimary == _TRUE)
+#endif //CONFIG_CONCURRENT_MODE
+	{
+		//Below is to termindate rtw_cmd_thread & event_thread...
+		_rtw_up_sema(&padapter->cmdpriv.cmd_queue_sema);
+		//_rtw_up_sema(&padapter->cmdpriv.cmd_done_sema);
+		if(padapter->cmdThread){
+			_rtw_down_sema(&padapter->cmdpriv.terminate_cmdthread_sema);
+		}
+	}	
 
 #ifdef CONFIG_EVENT_THREAD_MODE
         _rtw_up_sema(&padapter->evtpriv.evt_notify);
@@ -1151,6 +1200,7 @@ u8 rtw_init_default_value(_adapter *padapter)
 	padapter->bReadPortCancel = _FALSE;
 	padapter->bWritePortCancel = _FALSE;
 	padapter->bRxRSSIDisplay = 0;
+	padapter->bForceWriteInitGain = 1;
 	
 	return ret;
 }
@@ -1181,7 +1231,7 @@ u8 rtw_reset_drv_sw(_adapter *padapter)
 
 #ifdef CONFIG_AUTOSUSPEND	
 	#if (LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,22) && LINUX_VERSION_CODE<=KERNEL_VERSION(2,6,34))
-		padapter->dvobjpriv.pusbdev->autosuspend_disabled = 1;//autosuspend disabled by the user
+		adapter_to_dvobj(padapter)->pusbdev->autosuspend_disabled = 1;//autosuspend disabled by the user
 	#endif
 #endif
 
@@ -1372,8 +1422,6 @@ void rtw_cancel_all_timer(_adapter *padapter)
 
 u8 rtw_free_drv_sw(_adapter *padapter)
 {
-	struct net_device *pnetdev = (struct net_device*)padapter->pnetdev;
-
 	RT_TRACE(_module_os_intfs_c_,_drv_info_,("==>rtw_free_drv_sw"));
 
 
@@ -1440,17 +1488,10 @@ u8 rtw_free_drv_sw(_adapter *padapter)
 		padapter->rereg_nd_name_priv.old_pnetdev = NULL;
 	}	
 
-#ifdef CONFIG_DUALMAC_CONCURRENT
 	// clear pbuddy_adapter to avoid access wrong pointer.
 	if(padapter->pbuddy_adapter != NULL)
 	{
 		padapter->pbuddy_adapter->pbuddy_adapter = NULL;
-	}
-#endif
-
-	if(pnetdev)
-	{
-		rtw_free_netdev(pnetdev);
 	}
 
 	RT_TRACE(_module_os_intfs_c_,_drv_info_,("-rtw_free_drv_sw\n"));
@@ -1471,7 +1512,7 @@ int _netdev_if2_open(struct net_device *pnetdev)
 	{
 		_netdev_open(primary_padapter->pnetdev);
 	}
-	
+
 	if(padapter->bup == _FALSE && primary_padapter->bup == _TRUE && 
 		primary_padapter->hw_init_completed == _TRUE)
 	{
@@ -1481,16 +1522,11 @@ int _netdev_if2_open(struct net_device *pnetdev)
 	 	padapter->bSurpriseRemoved = _FALSE;	 
 		padapter->bCardDisableWOHSM = _FALSE;
 		
-
-		_rtw_memcpy(pnetdev->dev_addr, padapter->eeprompriv.mac_addr, ETH_ALEN); 
-
-
 		_rtw_memcpy(padapter->HalData, primary_padapter->HalData, padapter->hal_data_sz);
 
 		padapter->bFWReady = primary_padapter->bFWReady;
 
 		padapter->HalFunc.SetHwRegHandler(padapter, HW_VAR_DM_INIT_PWDB, NULL);		
-		padapter->HalFunc.SetHwRegHandler(padapter, HW_VAR_MAC_ADDR, pnetdev->dev_addr);
 
 		//if (init_mlme_ext_priv(padapter) == _FAIL)
 		//	goto netdev_if2_open_error;	
@@ -1510,12 +1546,8 @@ int _netdev_if2_open(struct net_device *pnetdev)
 
 		padapter->hw_init_completed = _TRUE;
 		
-
-#ifdef CONFIG_PROC_DEBUG
 		padapter->dir_dev = NULL;
 		rtw_proc_init_one(pnetdev);
-#endif
-
 
 #ifdef CONFIG_IOCTL_CFG80211
 		rtw_cfg80211_init_wiphy(padapter);
@@ -1585,8 +1617,7 @@ static int netdev_if2_close(struct net_device *pnetdev)
 	}
 
 #ifdef CONFIG_IOCTL_CFG80211
-	DBG_871X("call rtw_cfg80211_scan_abort when netdev_if2_close\n");
-	rtw_cfg80211_scan_abort(padapter);
+	rtw_scan_abort(padapter);
 	wdev_to_priv(padapter->rtw_wdev)->bandroid_scan = _FALSE;
 #endif
 
@@ -1612,26 +1643,35 @@ static const struct net_device_ops rtw_netdev_if2_ops = {
 	#include <usb_hal.h>
 #endif
 
-struct net_device *rtw_drv_if2_init(_adapter *primary_padapter, char *name)
+_adapter *rtw_drv_if2_init(_adapter *primary_padapter, char *name,
+	void (*set_intf_ops)(struct _io_ops *pops))
 {
 	int res = _FAIL;
 	struct net_device *pnetdev;	
 	_adapter *padapter = NULL;
 	struct dvobj_priv *pdvobjpriv;
 	u8 mac[ETH_ALEN];
-#ifdef CONFIG_USB_HCI
-	struct usb_interface *pusb_intf;
-	struct usb_device *pusbdev;
-#endif
 
+	/****** init netdev ******/
 	pnetdev = rtw_init_netdev(NULL);
-	if (!pnetdev) 
+	if (!pnetdev)
 		goto error_rtw_drv_if2_init;
 
-	//
-	padapter = rtw_netdev_priv(pnetdev);
+#if (LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,29))
+	printk("register rtw_netdev_if2_ops to netdev_ops\n");
+	pnetdev->netdev_ops = &rtw_netdev_if2_ops;
+#else
+	pnetdev->open = netdev_if2_open;
+	pnetdev->stop = netdev_if2_close;		
+#endif
 
-	//
+#ifdef CONFIG_NO_WIRELESS_HANDLERS
+	pnetdev->wireless_handlers = NULL;
+#endif
+
+
+	/****** init adapter ******/
+	padapter = rtw_netdev_priv(pnetdev);
 	_rtw_memcpy(padapter, primary_padapter, sizeof(_adapter));
 	padapter->ph2c_fwcmd_mutex = primary_padapter->ph2c_fwcmd_mutex;
 	padapter->psetch_mutex = primary_padapter->psetch_mutex;
@@ -1642,95 +1682,65 @@ struct net_device *rtw_drv_if2_init(_adapter *primary_padapter, char *name)
 	padapter->bup = _FALSE;
 	padapter->net_closed = _TRUE;
 	padapter->hw_init_completed = _FALSE;
-	
-
-	//
-	padapter->pnetdev = pnetdev;
-
-	//
-#if (LINUX_VERSION_CODE>=KERNEL_VERSION(2,6,29))
-	printk("register rtw_netdev_if2_ops to netdev_ops\n");
-	pnetdev->netdev_ops = &rtw_netdev_if2_ops;
-#else
-	pnetdev->open = netdev_if2_open;
-	pnetdev->stop = netdev_if2_close;		
-#endif
-
-	
-#ifdef CONFIG_NO_WIRELESS_HANDLERS
-	pnetdev->wireless_handlers = NULL;
-#endif
-
-	pdvobjpriv = &padapter->dvobjpriv;
-	pdvobjpriv->padapter = padapter;
-	
 
 	//set adapter_type/iface type
 	padapter->isprimary = _FALSE;
 	padapter->adapter_type = SECONDARY_ADAPTER;
-
-	padapter->iface_type = IFACE_PORT0;//
-	//padapter->iface_type = IFACE_PORT1;//
+	padapter->pbuddy_adapter = primary_padapter;	
+#ifndef CONFIG_HWPORT_SWAP
+	padapter->iface_type = IFACE_PORT1;
+#else
+	padapter->iface_type = IFACE_PORT0;
+#endif
+	//
+	padapter->pnetdev = pnetdev;
 	
-	padapter->pbuddy_adapter = primary_padapter;
-
-#ifdef CONFIG_USB_HCI	
-	pusb_intf = primary_padapter->dvobjpriv.pusbintf;
-	pusbdev = primary_padapter->dvobjpriv.pusbdev;
-	
-	SET_NETDEV_DEV(pnetdev, &pusb_intf->dev);
-	pdvobjpriv->pusbintf = pusb_intf ;
-	pdvobjpriv->pusbdev = pusbdev;
-	//pdvobjpriv->pusbdev = interface_to_usbdev(pusb_intf);
-
-#ifdef CONFIG_IOCTL_CFG80211
-	rtw_wdev_alloc(padapter, &pusb_intf->dev);
-#endif //CONFIG_IOCTL_CFG80211
-#endif //CONFIG_USB_HCI
-
-#if defined(CONFIG_IOCTL_CFG80211)&&defined(CONFIG_PCI_HCI)
-	SET_NETDEV_DEV(pnetdev, &(pdvobjpriv->ppcidev->dev));
-	rtw_wdev_alloc(padapter, &(pdvobjpriv->ppcidev->dev));
-#endif //CONFIG_IOCTL_CFG80211
-
+	/****** setup dvobj ******/
+	pdvobjpriv = adapter_to_dvobj(padapter);
+	pdvobjpriv->if2 = padapter;
+		
+	SET_NETDEV_DEV(pnetdev, dvobj_to_dev(pdvobjpriv));
+	#ifdef CONFIG_IOCTL_CFG80211
+	rtw_wdev_alloc(padapter, dvobj_to_dev(pdvobjpriv));
+	#endif //CONFIG_IOCTL_CFG80211
 
 	//set interface_type/chip_type/HardwareType
 	padapter->interface_type = primary_padapter->interface_type;		
 	padapter->chip_type = primary_padapter->chip_type;
 	padapter->HardwareType = primary_padapter->HardwareType;
-
 	
 	//set hal data & hal ops
-	if(padapter->chip_type == RTL8188C_8192C)
-	{
-#ifdef CONFIG_RTL8192C
-#ifdef CONFIG_PCI_HCI
+#if defined(CONFIG_RTL8192C)
+	#if defined(CONFIG_PCI_HCI)
 		rtl8192ce_set_hal_ops(padapter);
-#else
+	#elif defined(CONFIG_USB_HCI)
 		rtl8192cu_set_hal_ops(padapter);
-#endif
-#endif
-	}
-	else if(padapter->chip_type == RTL8192D)
-	{
-#ifdef CONFIG_RTL8192D
+	#endif
+#elif defined(CONFIG_RTL8192D)
+	#if defined(CONFIG_PCI_HCI)
+		rtl8192de_set_hal_ops(padapter);
+	#elif defined(CONFIG_USB_HCI)
 		rtl8192du_set_hal_ops(padapter);
+	#endif
 #endif
-	}
 
 	padapter->HalFunc.inirp_init = NULL;
 	padapter->HalFunc.inirp_deinit = NULL;
 
-
-	//	
-	padapter->dvobj_init = primary_padapter->dvobj_init;	
-	padapter->dvobj_deinit = primary_padapter->dvobj_deinit;
+	//
 	padapter->intf_start = primary_padapter->intf_start;
 	padapter->intf_stop = primary_padapter->intf_stop;
 
-	//initialize the dvobj_priv
-	if(padapter->dvobj_init(padapter) != _SUCCESS)
-		goto error_rtw_drv_if2_init;
+	//step init_io_priv
+	if ((rtw_init_io_priv(padapter, set_intf_ops)) == _FAIL) {
+		RT_TRACE(_module_hci_intfs_c_,_drv_err_,(" \n Can't init io_reqs\n"));
+	}
+
+	//step read_chip_version
+	intf_read_chip_version(padapter);
+
+	//step usb endpoint mapping
+	intf_chip_configure(padapter);
 
 
 	//init drv data
@@ -1771,18 +1781,9 @@ struct net_device *rtw_drv_if2_init(_adapter *primary_padapter, char *name)
 	
 	_rtw_memcpy(pnetdev->dev_addr, mac, ETH_ALEN);
 
-	printk("MAC Address (if2) = %02x:%02x:%02x:%02x:%02x:%02x\n",
-				mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-
+	DBG_871X("MAC Address (if2) = "MAC_FMT"\n", MAC_ARG(mac));
 
 	primary_padapter->pbuddy_adapter = padapter;
-	
-	//set adapter_type/iface type for primary padapter
-	primary_padapter->isprimary = _TRUE;
-	primary_padapter->adapter_type = PRIMARY_ADAPTER;	
-	//primary_padapter->iface_type = IFACE_PORT0;//
-	primary_padapter->iface_type = IFACE_PORT1;//
-	
 
 	//prepare concurrent shared data buffer
 	if(!primary_padapter->pcodatapriv)
@@ -1808,20 +1809,16 @@ struct net_device *rtw_drv_if2_init(_adapter *primary_padapter, char *name)
 	
 	res = _SUCCESS;
 
-	//return res;
-	return pnetdev;
+	return padapter;
 
 		
 error_rtw_drv_if2_init:
 
-	padapter->dvobj_deinit(padapter);
+	rtw_free_drv_sw(padapter);
 
-	//if(padapter->HalData)
-	//	rtw_mfree(padapter->HalData, sizeof(HAL_DATA_TYPE));
-
-	rtw_free_drv_sw(padapter);	
+	if (pnetdev)
+		rtw_free_netdev(pnetdev);
 	
-	//return res;
 	return NULL;
 	
 }
@@ -1854,12 +1851,7 @@ void rtw_drv_if2_free(_adapter *primary_padapter)
 	if(pnetdev) 
 	{
 		unregister_netdev(pnetdev); //will call netdev_close()
-
-#ifdef CONFIG_PROC_DEBUG
-		if(padapter->bup == _TRUE)
-			rtw_proc_remove_one(pnetdev);
-#endif		
-		
+		rtw_proc_remove_one(pnetdev);
 	}
 
 	rtw_cancel_all_timer(padapter);
@@ -1874,11 +1866,6 @@ void rtw_drv_if2_free(_adapter *primary_padapter)
 		}
 
 		rtw_stop_drv_threads(padapter);
-
-		if(padapter->dvobj_deinit)
-		{
-			padapter->dvobj_deinit(padapter);
-		}
 		
 		padapter->bup = _FALSE;
 	}
@@ -1889,11 +1876,11 @@ void rtw_drv_if2_free(_adapter *primary_padapter)
 	
 	rtw_free_drv_sw(padapter);
 
-	
-
 #ifdef CONFIG_IOCTL_CFG80211
 	rtw_wdev_free(wdev);
 #endif //CONFIG_IOCTL_CFG80211
+
+	rtw_free_netdev(pnetdev);
 
 	//free concurrent shared data buffer
 	if(primary_padapter->pcodatapriv)
@@ -1970,11 +1957,11 @@ int _netdev_open(struct net_device *pnetdev)
 	}
 
 	if(padapter->bup == _FALSE)
-	{    
+	{
 		padapter->bDriverStopped = _FALSE;
-	 	padapter->bSurpriseRemoved = _FALSE;	 
-		padapter->bCardDisableWOHSM = _FALSE;        	
-	
+		padapter->bSurpriseRemoved = _FALSE;
+		padapter->bCardDisableWOHSM = _FALSE;
+
 		status = rtw_hal_init(padapter);
 		if (status ==_FAIL)
 		{			
@@ -2009,10 +1996,8 @@ int _netdev_open(struct net_device *pnetdev)
 			padapter->intf_start(padapter);
 		}
 
-#ifdef CONFIG_PROC_DEBUG
 #ifndef RTK_DMP_PLATFORM
 		rtw_proc_init_one(pnetdev);
-#endif
 #endif
 
 #ifdef CONFIG_IOCTL_CFG80211
@@ -2027,11 +2012,8 @@ int _netdev_open(struct net_device *pnetdev)
 
 	_set_timer(&padapter->mlmepriv.dynamic_chk_timer, 2000);
 
-	if(( pwrctrlpriv->power_mgnt != PS_MODE_ACTIVE ) ||(padapter->pwrctrlpriv.bHWPwrPindetect))
-	{
-		padapter->pwrctrlpriv.bips_processing = _FALSE;	
-		rtw_set_pwr_state_check_timer(&padapter->pwrctrlpriv);
- 	}
+	padapter->pwrctrlpriv.bips_processing = _FALSE;	
+	rtw_set_pwr_state_check_timer(&padapter->pwrctrlpriv);
 
 	//netif_carrier_on(pnetdev);//call this func when rtw_joinbss_event_callback return success
 	if(!rtw_netif_queue_stopped(pnetdev))
@@ -2057,6 +2039,14 @@ int _netdev_open(struct net_device *pnetdev)
 #endif // CONFIG_P2P
 
 netdev_open_normal_process:
+
+	#ifdef CONFIG_CONCURRENT_MODE
+	{
+		_adapter *sec_adapter = padapter->pbuddy_adapter;
+		if(sec_adapter && (sec_adapter->bup == _FALSE || sec_adapter->hw_init_completed == _FALSE))
+			_netdev_if2_open(sec_adapter->pnetdev);
+	}
+	#endif
 
 	RT_TRACE(_module_os_intfs_c_,_drv_info_,("-871x_drv - dev_open\n"));
 	DBG_871X("-871x_drv - drv_open, bup=%d\n", padapter->bup);
@@ -2256,7 +2246,7 @@ static int netdev_close(struct net_device *pnetdev)
 #endif //CONFIG_P2P
 
 #ifdef CONFIG_IOCTL_CFG80211
-	rtw_cfg80211_scan_abort(padapter);
+	rtw_scan_abort(padapter);
 	wdev_to_priv(padapter->rtw_wdev)->bandroid_scan = _FALSE;
 	padapter->rtw_wdev->iftype = NL80211_IFTYPE_MONITOR; //set this at the end
 #endif //CONFIG_IOCTL_CFG80211

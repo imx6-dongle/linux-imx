@@ -608,25 +608,7 @@ WLAN_BSSID_EX, *PWLAN_BSSID_EX;
 
 __inline  static uint get_WLAN_BSSID_EX_sz(WLAN_BSSID_EX *bss)
 {
-	uint t_len;
-	
-	t_len = sizeof (ULONG) 
-		+ sizeof (NDIS_802_11_MAC_ADDRESS) 
-		+ 2 
-		+ sizeof (NDIS_802_11_SSID) 
-		+ sizeof (ULONG) 
-		+ sizeof (NDIS_802_11_RSSI) 
-		+ sizeof (NDIS_802_11_NETWORK_TYPE)
-		+ sizeof (NDIS_802_11_CONFIGURATION)
-		+ sizeof (NDIS_802_11_NETWORK_INFRASTRUCTURE)
-		+ sizeof (NDIS_802_11_RATES_EX)
-		//all new member add here
-		+ sizeof(WLAN_PHY_INFO)
-		//all new member add here
-		+ sizeof (ULONG)
-		+ bss->IELength;	
-	return t_len;
-	
+	return (sizeof(WLAN_BSSID_EX) - MAX_IE_SZ + bss->IELength);
 }
 
 struct	wlan_network {

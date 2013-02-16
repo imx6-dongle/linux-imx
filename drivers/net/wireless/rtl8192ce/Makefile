@@ -1,6 +1,5 @@
 EXTRA_CFLAGS += $(USER_EXTRA_CFLAGS)
 EXTRA_CFLAGS += -O1
-#EXTRA_CFLAGS += -DCONFIG_WAKELOCK
 #EXTRA_CFLAGS += -O3
 #EXTRA_CFLAGS += -Wall
 #EXTRA_CFLAGS += -Wextra
@@ -66,7 +65,7 @@ CONFIG_PLATFORM_TI_DM365 = n
 CONFIG_PLATFORM_MN10300 = n
 CONFIG_PLATFORM_MSTAR_TITANIA12 = n
 CONFIG_PLATFORM_MSTAR_A3 = n
-CONFIG_PLATFORM_ARM_SUN4I     =   n
+CONFIG_PLATFORM_ARM_SUNxI     =   n
 
 CONFIG_DRVEXT_MODULE = n
 
@@ -89,7 +88,9 @@ MODULE_NAME = 8192ce
 FW_FILES := hal/$(RTL871X)/pci/Hal8192CEHWImg.o
 endif
 
-CHIP_FILES := hal/$(RTL871X)/$(RTL871X)_sreset.o
+CHIP_FILES := \
+	hal/$(RTL871X)/$(RTL871X)_sreset.o \
+	hal/$(RTL871X)/$(RTL871X)_xmit.o
 CHIP_FILES += $(FW_FILES)
 endif
 
@@ -109,6 +110,8 @@ MODULE_NAME = 8192de
 FW_FILES := hal/$(RTL871X)/pci/Hal8192DEHWImg.o
 endif
 
+CHIP_FILES := \
+	hal/$(RTL871X)/$(RTL871X)_xmit.o
 CHIP_FILES += $(FW_FILES)
 endif
 
@@ -163,7 +166,7 @@ _OS_INTFS_FILES :=	os_dep/osdep_service.o \
 			os_dep/linux/rtw_android.o
 
 
-_HAL_INTFS_FILES :=	hal/hal_init.o \
+_HAL_INTFS_FILES :=	hal/hal_intf.o \
 			hal/hal_com.o \
 			hal/$(RTL871X)/$(RTL871X)_hal_init.o \
 			hal/$(RTL871X)/$(RTL871X)_phycfg.o \
@@ -389,26 +392,26 @@ KSRC := /home/cnsd4/Appro/mv_pro_5.0/montavista/pro/devkit/lsp/ti-davinci/linux-
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_TEGRA3), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN #-DCONFIG_MINIMAL_MEMORY_USAGE
-ARCH ?= arm
-CROSS_COMPILE ?= /media/DATA-1/nvidia/gingerbread/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
-KSRC ?= /media/DATA-1/nvidia/gingerbread/out/debug/target/product/cardhu/obj/KERNEL
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
+ARCH := arm
+CROSS_COMPILE := /home/android_sdk/nvidia/tegra-16r3-partner-android-4.1_20120723/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
+KSRC := /home/android_sdk/nvidia/tegra-16r3-partner-android-4.1_20120723/out/target/product/cardhu/obj/KERNEL
 MODULE_NAME := wlan
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_TCC8900), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_MINIMAL_MEMORY_USAGE
-ARCH ?= arm
-CROSS_COMPILE ?= /media/DATA-1/telechips/SDK_2302_20110425/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
-KSRC ?=/media/DATA-1/telechips/SDK_2302_20110425/kernel
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
+ARCH := arm
+CROSS_COMPILE := /home/android_sdk/Telechips/SDK_2304_20110613/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
+KSRC := /home/android_sdk/Telechips/SDK_2304_20110613/kernel
 MODULE_NAME := wlan
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_TCC8920), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN #-DCONFIG_MINIMAL_MEMORY_USAGE
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
 ARCH := arm
-CROSS_COMPILE := /media/DATA-2/telechips/ics_sdk/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
-KSRC := /media/DATA-2/telechips/ics_sdk/kernel
+CROSS_COMPILE := /home/android_sdk/Telechips/v12.06_r1-tcc-android-4.0.4/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
+KSRC := /home/android_sdk/Telechips/v12.06_r1-tcc-android-4.0.4/kernel
 MODULE_NAME := wlan
 endif
 
@@ -447,12 +450,16 @@ KSRC := /home/winuser/work/Plat_sLD2T_V3010/usr/src/linux-2.6.32.2
 INSTALL_PREFIX :=
 endif
 
-ifeq ($(CONFIG_PLATFORM_ARM_SUN4I), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ARM_SUN4I
+ifeq ($(CONFIG_PLATFORM_ARM_SUNxI), y)
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ARM_SUNxI
 ARCH := arm
 CROSS_COMPILE := arm-none-linux-gnueabi-
 KVER  := 3.0.8
 #KSRC:= ../lichee/linux-3.0/
+endif
+
+ifneq ($(USER_MODULE_NAME),)
+MODULE_NAME := $(USER_MODULE_NAME)
 endif
 
 ifeq ($(CONFIG_MP_INCLUDED), y)
@@ -478,6 +485,7 @@ rtk_core :=	core/rtw_cmd.o \
 		core/rtw_rf.o \
 		core/rtw_recv.o \
 		core/rtw_sta_mgt.o \
+		core/rtw_ap.o \
 		core/rtw_xmit.o	\
 		core/rtw_p2p.o \
 		core/rtw_tdls.o \
@@ -520,7 +528,7 @@ uninstall:
 	rm -f $(MODDESTDIR)/$(MODULE_NAME).ko
 	/sbin/depmod -a ${KVER}
 
-	
+
 config_r:
 	@echo "make config"
 	/bin/bash script/Configure script/config.in

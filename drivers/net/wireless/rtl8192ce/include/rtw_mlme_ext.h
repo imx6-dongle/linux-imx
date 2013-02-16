@@ -40,8 +40,8 @@
 
 #define LINKED_TO (1) //unit:2 sec, 1x2=2 sec
 
-#define REAUTH_LIMIT	(2)
-#define REASSOC_LIMIT	(2)
+#define REAUTH_LIMIT	(4)
+#define REASSOC_LIMIT	(4)
 #define READDBA_LIMIT	(2)
 
 //#define	IOCMD_REG0		0x10250370		 	
@@ -79,6 +79,16 @@
 #define		_36M_RATE_	9
 #define		_48M_RATE_	10
 #define		_54M_RATE_	11
+
+
+extern unsigned char RTW_WPA_OUI[];
+extern unsigned char WMM_OUI[];
+extern unsigned char WPS_OUI[];
+extern unsigned char WFD_OUI[];
+extern unsigned char P2P_OUI[];
+
+extern unsigned char WMM_INFO_OUI[];
+extern unsigned char WMM_PARA_OUI[];
 
 
 //
@@ -149,6 +159,7 @@ typedef enum _RT_CHANNEL_DOMAIN_2G
 	RT_CHANNEL_DOMAIN_2G_FCC1 = 0x02,		//US
 	RT_CHANNEL_DOMAIN_2G_MKK1 = 0x03,		//Japan
 	RT_CHANNEL_DOMAIN_2G_ETSI2 = 0x04,		//France
+	RT_CHANNEL_DOMAIN_2G_NULL = 0x05,
 	//===== Add new channel plan above this line===============//
 	RT_CHANNEL_DOMAIN_2G_MAX,
 }RT_CHANNEL_DOMAIN_2G, *PRT_CHANNEL_DOMAIN_2G;
@@ -311,6 +322,30 @@ struct FW_Sta_Info
 	NDIS_802_11_RATES_EX  SupportedRates;
 };
 
+/*
+ * Usage:
+ * When one iface acted as AP mode and the other iface is STA mode and scanning, 
+ * it should switch back to AP's operating channel periodically.
+ * Parameters info:
+ * When the driver scanned RTW_SCAN_NUM_OF_CH channels, it would switch back to AP's operating channel for
+ * RTW_STAY_AP_CH_MILLISECOND * SURVEY_TO milliseconds.
+ * Example:
+ * For chip supports 2.4G + 5GHz and AP mode is operating in channel 1, 
+ * RTW_SCAN_NUM_OF_CH is 8, RTW_STAY_AP_CH_MILLISECOND is 3 and SURVEY_TO is 100.
+ * When it's STA mode gets set_scan command, 
+ * it would 
+ * 1. Doing the scan on channel 1.2.3.4.5.6.7.8 
+ * 2. Back to channel 1 for 300 milliseconds
+ * 3. Go through doing site survey on channel 9.10.11.36.40.44.48.52
+ * 4. Back to channel 1 for 300 milliseconds
+ * 5. ... and so on, till survey done.
+ */
+#if defined CONFIG_STA_MODE_SCAN_UNDER_AP_MODE && defined CONFIG_CONCURRENT_MODE
+#define RTW_SCAN_NUM_OF_CH			8
+#define RTW_STAY_AP_CH_MILLISECOND	3	// this value is a multiplier,for example, when this value is 3, it would stay AP's op ch for 
+											// 3 * SURVEY_TO millisecond. 
+#endif //defined CONFIG_STA_MODE_SCAN_UNDER_AP_MODE && defined CONFIG_CONCURRENT_MODE
+
 struct mlme_ext_info
 {
 	u32	state;
@@ -355,6 +390,10 @@ struct mlme_ext_info
 	struct HT_info_element		HT_info;
 	WLAN_BSSID_EX			network;//join network or bss_network, if in ap mode, it is the same to cur_network.network
 	struct FW_Sta_Info		FW_sta_info[NUM_STA];
+
+#ifdef CONFIG_STA_MODE_SCAN_UNDER_AP_MODE
+	u8 scan_cnt;
+#endif //CONFIG_STA_MODE_SCAN_UNDER_AP_MODE
 };
 
 // The channel information about this channel including joining, scanning, and power constraints.
@@ -398,7 +437,8 @@ struct mlme_ext_priv
 	//_timer		ADDBA_timer;
 	u16			chan_scan_time;
 
-	u8 scan_abort;
+	u8	scan_abort;
+	u8	tx_rate; // TXRATE when USERATE is set.
 
 	u32	retry; //retry for issue probereq
 	
@@ -408,7 +448,8 @@ struct mlme_ext_priv
 	unsigned char bstart_bss;
 #endif
 
-	//recv_decache check for Action_public frame 
+	//recv_decache check for Action_public frame
+        u8 action_public_dialog_token;
 	u16 	 action_public_rxseq;
 
 #ifdef CONFIG_80211D
@@ -428,6 +469,9 @@ extern struct xmit_frame *alloc_mgtxmitframe(struct xmit_priv *pxmitpriv);
 unsigned char networktype_to_raid(unsigned char network_type);
 int judge_network_type(_adapter *padapter, unsigned char *rate, int ratelen);
 void get_rate_set(_adapter *padapter, unsigned char *pbssrate, int *bssrate_len);
+void UpdateBrateTbl(_adapter *padapter,u8 *mBratesOS);
+void UpdateBrateTblForSoftAP(u8 *bssrateset, u32 bssratelen);
+void change_band_update_ie(_adapter *padapter, WLAN_BSSID_EX *pnetwork);
 
 void Save_DM_Func_Flag(_adapter *padapter);
 void Restore_DM_Func_Flag(_adapter *padapter);
@@ -488,6 +532,7 @@ void process_csa_ie(_adapter *padapter, u8 *pframe, uint len);
 void update_IOT_info(_adapter *padapter);
 void update_capinfo(PADAPTER Adapter, u16 updateCap);
 void update_wireless_mode(_adapter * padapter);
+void update_tx_basic_rate(_adapter *padapter, u8 modulation);
 void update_bmc_sta_support_rate(_adapter *padapter, u32 mac_id);
 int update_sta_support_rate(_adapter *padapter, u8* pvar_ie, uint var_ie_len, int cam_idx);
 
@@ -515,8 +560,11 @@ void report_add_sta_event(_adapter *padapter, unsigned char* MacAddr, int cam_id
 void beacon_timing_control(_adapter *padapter);
 extern u8 set_tx_beacon_cmd(_adapter*padapter);
 unsigned int setup_beacon_frame(_adapter *padapter, unsigned char *beacon_frame);
+void update_mgnt_tx_rate(_adapter *padapter, u8 rate);
 void update_mgntframe_attrib(_adapter *padapter, struct pkt_attrib *pattrib);
 void dump_mgntframe(_adapter *padapter, struct xmit_frame *pmgntframe);
+s32 dump_mgntframe_and_wait(_adapter *padapter, struct xmit_frame *pmgntframe, int timeout_ms);
+s32 dump_mgntframe_and_wait_ack(_adapter *padapter, struct xmit_frame *pmgntframe);
 
 #ifdef CONFIG_P2P
 void issue_probersp_p2p(_adapter *padapter, unsigned char *da);
@@ -600,27 +648,6 @@ extern void process_addba_req(_adapter *padapter, u8 *paddba_req, u8 *addr);
 
 extern void update_TSF(struct mlme_ext_priv *pmlmeext, u8 *pframe, uint len);
 extern void correct_TSF(_adapter *padapter, struct mlme_ext_priv *pmlmeext);
-
-#ifdef CONFIG_AP_MODE
-void init_mlme_ap_info(_adapter *padapter);
-void free_mlme_ap_info(_adapter *padapter);
-//void update_BCNTIM(_adapter *padapter);
-void rtw_add_bcn_ie(_adapter *padapter, WLAN_BSSID_EX *pnetwork, u8 index, u8 *data, u8 len);
-void rtw_remove_bcn_ie(_adapter *padapter, WLAN_BSSID_EX *pnetwork, u8 index);
-void update_beacon(_adapter *padapter, u8 ie_id, u8 *oui, u8 tx);
-void expire_timeout_chk(_adapter *padapter);	
-void update_sta_info_apmode(_adapter *padapter, struct sta_info *psta);
-int rtw_check_beacon_data(_adapter *padapter, u8 *pbuf,  int len);
-#ifdef CONFIG_NATIVEAP_MLME
-void bss_cap_update(_adapter *padapter, struct sta_info *psta);
-void sta_info_update(_adapter *padapter, struct sta_info *psta);
-void ap_sta_info_defer_update(_adapter *padapter, struct sta_info *psta);
-void ap_free_sta(_adapter *padapter, struct sta_info *psta);
-int rtw_sta_flush(_adapter *padapter);
-void start_ap_mode(_adapter *padapter);
-void stop_ap_mode(_adapter *padapter);
-#endif
-#endif //end of CONFIG_AP_MODE
 
 
 #ifdef CONFIG_CONCURRENT_MODE

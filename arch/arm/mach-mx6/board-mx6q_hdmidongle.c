@@ -28,8 +28,6 @@
 #include <linux/clk.h>
 #include <linux/platform_device.h>
 #include <linux/fsl_devices.h>
-#include <linux/spi/spi.h>
-#include <linux/spi/flash.h>
 #include <linux/i2c.h>
 #include <linux/i2c/pca953x.h>
 #include <linux/ata.h>
@@ -70,11 +68,9 @@
 #include "crm_regs.h"
 #include "cpu_op-mx6.h"
 #include "board-mx6q_hdmidongle.h"
-#include "board-mx6dl_hdmidongle.h"
 
 #define HDMIDONGLE_USB_OTG_PWR	IMX_GPIO_NR(4, 15)
 #define HDMIDONGLE_USB_H1_PWR	IMX_GPIO_NR(4, 14)
-#define HDMIDONGLE_ECSPI2_CS0  IMX_GPIO_NR(2, 26)
 #define HDMIDONGLE_HDMI_CEC_IN	IMX_GPIO_NR(4, 11)
 
 
@@ -84,7 +80,6 @@
 
 #define HDMIDONGLE_SD2_CD		IMX_GPIO_NR(1, 4)
 #define HDMIDONGLE_REVA_POWER_KEY	IMX_GPIO_NR(6, 16)
-#define HDMIDONGLE_REVB_POWER_KEY	IMX_GPIO_NR(1, 27)
 
 #ifdef CONFIG_IMX_PCIE
 #define HDMIDONGLE_PCIE_PWR_EN	IMX_GPIO_NR(3, 7) /*fake pcie power enable */
@@ -100,30 +95,18 @@ extern char *pu_reg_id;
 
 static const struct esdhc_platform_data mx6q_hdmidongle_sd1_data __initconst = {
 	.always_present = 1,
-};
-
-static const struct esdhc_platform_data mx6q_hdmidongle_sd2_data __initconst = {
-	.cd_gpio = HDMIDONGLE_SD2_CD,
-	.keep_power_at_suspend = 1,
-	.support_8bit = 0,
-	.delay_line = 0,
-	.cd_type = ESDHC_CD_CONTROLLER,
-};
-
-static const struct esdhc_platform_data mx6q_hdmidongle_sd3_data __initconst = {
-	.always_present = 1,
 	.keep_power_at_suspend = 1,
 	.support_8bit = 1,
 	.delay_line = 0,
 	.cd_type = ESDHC_CD_PERMANENT,
 };
 
-static const struct esdhc_platform_data mx6q_hdmidongle_revc_sd3_data __initconst = {
-	.always_present = 1,
+static const struct esdhc_platform_data mx6q_hdmidongle_sd2_data __initconst = {
+	.cd_gpio = HDMIDONGLE_SD2_CD,
 	.keep_power_at_suspend = 1,
-	.support_8bit = 0,
+	.support_8bit = 1,
 	.delay_line = 0,
-	.cd_type = ESDHC_CD_PERMANENT,
+	.cd_type = ESDHC_CD_CONTROLLER,
 };
 
 static const struct anatop_thermal_platform_data
@@ -138,26 +121,9 @@ static inline void mx6q_hdmidongle_init_uart(void)
 	imx6q_add_imx_uart(3, NULL);
 }
 
-static int mx6q_hdmidongle_spi_cs[] = {
-	HDMIDONGLE_ECSPI2_CS0,
-};
-
-static const struct spi_imx_master mx6q_hdmidongle_spi_data __initconst = {
-	.chipselect     = mx6q_hdmidongle_spi_cs,
-	.num_chipselect = ARRAY_SIZE(mx6q_hdmidongle_spi_cs),
-};
-
 static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
 };
 
-static struct spi_board_info wm8326_spi1_board_info[] __initdata = {
-};
-
-static void spi_device_init(void)
-{
-	spi_register_board_info(wm8326_spi1_board_info,
-				ARRAY_SIZE(wm8326_spi1_board_info));
-}
 
 static struct imxi2c_platform_data mx6q_hdmidongle_i2c_data = {
 	.bitrate = 100000,
@@ -254,22 +220,14 @@ static void hdmi_init(int ipu_id, int disp_id)
 
 static void hdmi_enable_ddc_pin(void)
 {
-	if (cpu_is_mx6dl())
-		mxc_iomux_v3_setup_multiple_pads(mx6dl_hdmidongle_hdmi_ddc_pads,
-			ARRAY_SIZE(mx6dl_hdmidongle_hdmi_ddc_pads));
-	else
-		mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_hdmi_ddc_pads,
-			ARRAY_SIZE(mx6q_hdmidongle_hdmi_ddc_pads));
+	mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_hdmi_ddc_pads,
+					ARRAY_SIZE(mx6q_hdmidongle_hdmi_ddc_pads));
 }
 
 static void hdmi_disable_ddc_pin(void)
 {
-	if (cpu_is_mx6dl())
-		mxc_iomux_v3_setup_multiple_pads(mx6dl_hdmidongle_i2c2_pads,
-			ARRAY_SIZE(mx6dl_hdmidongle_i2c2_pads));
-	else
-		mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_i2c2_pads,
-			ARRAY_SIZE(mx6q_hdmidongle_i2c2_pads));
+	mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_i2c2_pads,
+					ARRAY_SIZE(mx6q_hdmidongle_i2c2_pads));
 }
 
 
@@ -364,25 +322,6 @@ static struct platform_device hdmidongle_reva_button_device = {
 		.platform_data = &hdmidongle_reva_button_data,
 	}
 };
-
-static struct gpio_keys_button hdmidongle_revb_buttons[] = {
-	GPIO_BUTTON(HDMIDONGLE_REVB_POWER_KEY, KEY_POWER, 1, "power", 1, 1),
-};
-
-static struct gpio_keys_platform_data hdmidongle_revb_button_data = {
-	.buttons	= hdmidongle_revb_buttons,
-	.nbuttons	= ARRAY_SIZE(hdmidongle_revb_buttons),
-};
-
-static struct platform_device hdmidongle_revb_button_device = {
-	.name		= "gpio-keys",
-	.id		= -1,
-	.num_resources  = 0,
-	.dev		= {
-		.platform_data = &hdmidongle_revb_button_data,
-	}
-};
-
 
 static void __init imx6q_add_device_buttons(void)
 {
@@ -479,23 +418,14 @@ static void __init mx6_hdmidongle_board_init(void)
 	gp_reg_id = hdmidongle_dvfscore_data.reg_id;
 	soc_reg_id = hdmidongle_dvfscore_data.soc_id;
 	pu_reg_id = hdmidongle_dvfscore_data.pu_id;
+
 	mx6q_hdmidongle_init_uart();
 
-	/*
-	 * MX6DL/Solo only supports single IPU
-	 * The following codes are used to change ipu id
-	 * and display id information for MX6DL/Solo. Then
-	 * register 1 IPU device and up to 2 displays for
-	 * MX6DL/Solo
-	 */
-	if (cpu_is_mx6dl()) {
-		hdmi_core_data.disp_id = 0;
-	}
 	imx6q_add_mxc_hdmi_core(&hdmi_core_data);
 
 	imx6q_add_ipuv3(0, &ipu_data[0]);
-	if (cpu_is_mx6q())
-		imx6q_add_ipuv3(1, &ipu_data[1]);
+	imx6q_add_ipuv3(1, &ipu_data[1]);
+
 	for (i = 0; i < ARRAY_SIZE(hdmidongle_fb_data); i++)
 		imx6q_add_ipuv3fb(i, &hdmidongle_fb_data[i]);
 
@@ -515,21 +445,15 @@ static void __init mx6_hdmidongle_board_init(void)
 	i2c_register_board_info(2, mxc_i2c2_board_info,
 			ARRAY_SIZE(mxc_i2c2_board_info));
 
-
-	/* SPI */
-	imx6q_add_ecspi(1, &mx6q_hdmidongle_spi_data);
-	spi_device_init();
-
 	imx6q_add_mxc_hdmi(&hdmi_data);
 
 	imx6q_add_anatop_thermal_imx(1, &mx6q_hdmidongle_anatop_thermal_data);
 	imx6q_add_pm_imx(0, &mx6q_hdmidongle_pm_data);
-	/* Move sd3 to first because sd3 connect to emmc.
-	   Mfgtools want emmc is mmcblk0 and other sd card is mmcblk1. */
+
 
 	imx6q_add_sdhci_usdhc_imx(3, &mx6q_hdmidongle_sd1_data);
-	imx6q_add_sdhci_usdhc_imx(2, &mx6q_hdmidongle_sd2_data);
-	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd3_data);
+	imx6q_add_sdhci_usdhc_imx(1, &mx6q_hdmidongle_sd2_data);
+	
 	imx_add_viv_gpu(&imx6_gpu_data, &imx6q_gpu_pdata);
 	imx6q_hdmidongle_init_usb();
 
@@ -555,16 +479,19 @@ static void __init mx6_hdmidongle_board_init(void)
 	gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
 	gpio_direction_output(HDMIDONGLE_BT_RST, 1);
 	gpio_set_value(HDMIDONGLE_BT_RST, 1);
+	printk(KERN_ERR "%s: bt_reset\n", __func__);
 	msleep(1000);
 
 	gpio_request(HDMIDONGLE_BT_EN, "bt_en");
 	gpio_direction_output(HDMIDONGLE_BT_EN, 1);
 	gpio_set_value(HDMIDONGLE_BT_EN, 1);
+	printk(KERN_ERR "%s: bt_en\n", __func__);
 	msleep(1000);
 
 	gpio_request(HDMIDONGLE_WL_EN, "wl_en");
 	gpio_direction_output(HDMIDONGLE_WL_EN, 1);
 	gpio_set_value(HDMIDONGLE_WL_EN, 1);
+	printk(KERN_ERR "%s: wl_en\n", __func__);
 	msleep(1000);
 
 	pm_power_off = mx6_snvs_poweroff;
@@ -616,8 +543,8 @@ static void __init mx6q_hdmidongle_reserve(void)
 /*
  * initialize __mach_desc_MX6Q_HDMIDONGLE data structure.
  */
-MACHINE_START(MX6Q_HDMIDONGLE, "Freescale i.MX 6Quad/DualLite HDMI Dongle Board")
-	/* Maintainer: Freescale Semiconductor, Inc. */
+MACHINE_START(MX6Q_HDMIDONGLE, "Freescale i.MX6q Hi802/GK802 board")
+	/* Maintainer: Dmitriy Beykun */
 	.boot_params = MX6_PHYS_OFFSET + 0x100,
 	.fixup = fixup_mxc_board,
 	.map_io = mx6_map_io,

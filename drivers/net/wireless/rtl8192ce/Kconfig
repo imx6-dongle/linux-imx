@@ -1,4 +1,3 @@
-#config RTL8192CE
 config RTL8192CE
 	tristate "Realtek 8192C PCI WiFi"
 	depends on PCI

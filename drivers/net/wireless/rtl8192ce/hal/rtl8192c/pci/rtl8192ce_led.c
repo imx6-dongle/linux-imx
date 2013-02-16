@@ -64,6 +64,17 @@ BlinkTimerCallback(
 	unsigned long data
 	);
 
+
+static void
+ResetLedStatus(PLED_871x	pLed) {
+	pLed->CurrLedState = RTW_LED_OFF; // Current LED state.
+	pLed->bLedOn = _FALSE; // true if LED is ON, false if LED is OFF.
+	pLed->bLedBlinkInProgress = _FALSE; // true if it is blinking, false o.w..
+	pLed->bLedWPSBlinkInProgress = _FALSE;
+	pLed->BlinkTimes = 0; // Number of times to toggle led state for blinking.
+	pLed->BlinkingLedState = LED_UNKNOWN; // Next state for blinking, either RTW_LED_ON or RTW_LED_OFF are.
+}
+
 //================================================================================
 // LED_819xUsb routines. 
 //================================================================================
@@ -105,9 +116,8 @@ DeInitLed871x(
 	)
 {
 	_cancel_timer_ex(&(pLed->BlinkTimer));
-
 	// We should reset bLedBlinkInProgress if we cancel the LedControlTimer, 2005.03.10, by rcnjko.
-	pLed->bLedBlinkInProgress = _FALSE;
+	ResetLedStatus(pLed);
 }
 
 

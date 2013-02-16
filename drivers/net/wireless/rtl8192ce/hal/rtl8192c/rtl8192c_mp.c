@@ -340,7 +340,7 @@ void Hal_MPT_CCKTxPowerAdjustbyIndex(PADAPTER pAdapter, BOOLEAN beven)
 	PMPT_CONTEXT	pMptCtx = &pAdapter->mppriv.MptCtx;
 
 
-	if (!IS_92C_SERIAL(pHalData->VersionID) || !IS_NORMAL_CHIP(pHalData->VersionID))
+	if (!IS_92C_SERIAL(pHalData->VersionID))
 		return;
 #if 0
 	while(PlatformAtomicExchange(&Adapter->IntrCCKRefCount, TRUE) == TRUE)
@@ -475,13 +475,6 @@ void Hal_SetChannel(PADAPTER pAdapter)
 		pHalData->dmpriv.bCCKinCH14 = _FALSE;
 		Hal_MPT_CCKTxPowerAdjust(pAdapter, pHalData->dmpriv.bCCKinCH14);
 	}
-#if 0
-//#ifdef CONFIG_USB_HCI
-	// Georgia add 2009-11-17, suggested by Edlu , for 8188CU ,46 PIN
-	if (!IS_92C_SERIAL(pHalData->VersionID) && !IS_NORMAL_CHIP(pHalData->VersionID)) {
-		mpt_AdjustRFRegByRateByChan92CU(pAdapter, rate, pHalData->CurrentChannel, bandwidth);
-	}
-#endif
 
 #endif
 }
@@ -538,14 +531,6 @@ void Hal_SetOFDMTxPower(PADAPTER pAdapter, u8 *TxPower)
 	write_bbreg(pAdapter, rTxAGC_A_Mcs11_Mcs08, bMaskDWord, TxAGC);
 	write_bbreg(pAdapter, rTxAGC_A_Mcs15_Mcs12, bMaskDWord, TxAGC);
 
-	if (pHalData->dmpriv.bAPKdone && !IS_NORMAL_CHIP(pHalData->VersionID))
-	{
-		if (tmpval > pMptCtx->APK_bound[RF_PATH_A])
-			write_rfreg(pAdapter, RF_PATH_A, 0xe, pHalData->dmpriv.APKoutput[0][0]);
-		else
-			write_rfreg(pAdapter, RF_PATH_A, 0xe, pHalData->dmpriv.APKoutput[0][1]);
-	}
-
 	// HT Tx-rf(B)
 	tmpval = TxPower[RF_PATH_B];
 	TxAGC = (tmpval<<24) | (tmpval<<16) | (tmpval<<8) | tmpval;
@@ -556,14 +541,6 @@ void Hal_SetOFDMTxPower(PADAPTER pAdapter, u8 *TxPower)
 	write_bbreg(pAdapter, rTxAGC_B_Mcs07_Mcs04, bMaskDWord, TxAGC);
 	write_bbreg(pAdapter, rTxAGC_B_Mcs11_Mcs08, bMaskDWord, TxAGC);
 	write_bbreg(pAdapter, rTxAGC_B_Mcs15_Mcs12, bMaskDWord, TxAGC);
-
-	if (pHalData->dmpriv.bAPKdone && !IS_NORMAL_CHIP(pHalData->VersionID))
-	{
-		if (tmpval > pMptCtx->APK_bound[RF_PATH_B])
-			write_rfreg(pAdapter, RF_PATH_B, 0xe, pHalData->dmpriv.APKoutput[1][0]);
-		else
-			write_rfreg(pAdapter, RF_PATH_B, 0xe, pHalData->dmpriv.APKoutput[1][1]);
-	}
 
 	RT_TRACE(_module_mp_, _drv_notice_,
 		 ("-SetOFDMTxPower: A[0x%02x] B[0x%02x]\n",

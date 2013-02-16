@@ -299,41 +299,38 @@ void _rtw_read_port_cancel(_adapter *adapter)
 
 }
 
-void _rtw_write_port(_adapter *adapter, u32 addr, u32 cnt, u8 *pmem)
+u32 _rtw_write_port(_adapter *adapter, u32 addr, u32 cnt, u8 *pmem)
 {
 	u32 (*_write_port)(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *pmem);
 	//struct	io_queue  	*pio_queue = (struct io_queue *)adapter->pio_queue;
 	struct io_priv *pio_priv = &adapter->iopriv;
 	struct	intf_hdl		*pintfhdl = &(pio_priv->intf);
+	u32 ret = _SUCCESS;
 
 	_func_enter_;
 
 	_write_port = pintfhdl->io_ops._write_port;
 	
-	_write_port(pintfhdl, addr, cnt, pmem);
+	ret = _write_port(pintfhdl, addr, cnt, pmem);
 
 	 _func_exit_;
 
+	return ret;
 }
 
-int _rtw_write_port_sync(_adapter *adapter, u32 addr, u32 cnt, u8 *pmem)
+u32 _rtw_write_port_and_wait(_adapter *adapter, u32 addr, u32 cnt, u8 *pmem, int timeout_ms)
 {
-	int (*_write_port_sync)(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *pmem);
-	//struct	io_queue  	*pio_queue = (struct io_queue *)adapter->pio_queue;
-	struct io_priv *pio_priv = &adapter->iopriv;
-	struct	intf_hdl		*pintfhdl = &(pio_priv->intf);
 	int ret = _SUCCESS;
-	
-	_func_enter_;
+	struct xmit_buf *pxmitbuf = (struct xmit_buf *)pmem;
+	struct submit_ctx sctx;
 
-	_write_port_sync = pintfhdl->io_ops._write_port_sync;
+	rtw_sctx_init(&sctx, timeout_ms);
+	pxmitbuf->sctx = &sctx;
 
-	if(_write_port_sync)
-		ret = _write_port_sync(pintfhdl, addr, cnt, pmem);
-	else
-		ret = _FAIL;
+	ret = _rtw_write_port(adapter, addr, cnt, pmem);
 
-	 _func_exit_;
+	if (ret == _SUCCESS)
+		ret = rtw_sctx_wait(&sctx);
 
 	 return ret;
 }
@@ -361,7 +358,7 @@ int rtw_init_io_priv(_adapter *padapter, void (*set_intf_ops)(struct _io_ops *po
 
 	piopriv->padapter = padapter;
 	pintf->padapter = padapter;
-	pintf->pintf_dev = &padapter->dvobjpriv;
+	pintf->pintf_dev = adapter_to_dvobj(padapter);
 
 	set_intf_ops(&pintf->io_ops);
 

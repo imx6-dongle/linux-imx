@@ -38,7 +38,7 @@ struct xmit_frame	*rtw_IOL_accquire_xmit_frame(ADAPTER *adapter)
 	if ((xmitbuf = rtw_alloc_xmitbuf(pxmitpriv)) == NULL)
 	{
 		DBG_871X("%s rtw_alloc_xmitbuf return null\n", __FUNCTION__);
-		rtw_free_xmitframe_ex(pxmitpriv, xmit_frame);
+		rtw_free_xmitframe(pxmitpriv, xmit_frame);
 		xmit_frame=NULL;
 		goto exit;
 	}
@@ -255,7 +255,7 @@ bool rtw_IOL_applied(ADAPTER *adapter)
 		return _TRUE;
 
 #ifdef CONFIG_USB_HCI
-	if(!adapter->dvobjpriv.ishighspeed)
+	if(!adapter_to_dvobj(adapter)->ishighspeed)
 		return _TRUE;
 #endif
 

@@ -38,7 +38,7 @@
 static int rtl8192ce_init_rx_ring(_adapter * padapter)
 {
 	struct recv_priv	*precvpriv = &padapter->recvpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct pci_dev	*pdev = pdvobjpriv->ppcidev;
 	struct net_device	*dev = padapter->pnetdev;
     	struct recv_stat	*entry = NULL;
@@ -104,7 +104,7 @@ _func_exit_;
 static void rtl8192ce_free_rx_ring(_adapter * padapter)
 {
 	struct recv_priv	*precvpriv = &padapter->recvpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct pci_dev	*pdev = pdvobjpriv->ppcidev;
 	int i, rx_queue_idx;
 
@@ -140,7 +140,7 @@ _func_exit_;
 static int rtl8192ce_init_tx_ring(_adapter * padapter, unsigned int prio, unsigned int entries)
 {
 	struct xmit_priv	*pxmitpriv = &padapter->xmitpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct pci_dev	*pdev = pdvobjpriv->ppcidev;
 	struct tx_desc	*ring;
 	dma_addr_t		dma;
@@ -177,7 +177,7 @@ _func_exit_;
 static void rtl8192ce_free_tx_ring(_adapter * padapter, unsigned int prio)
 {
 	struct xmit_priv	*pxmitpriv = &padapter->xmitpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	struct pci_dev	*pdev = pdvobjpriv->ppcidev;
 	struct rtw_tx_ring *ring = &pxmitpriv->tx_ring[prio];
 
@@ -287,7 +287,7 @@ void rtl8192ce_reset_desc_ring(_adapter * padapter)
 	_irqL	irqL;
 	struct xmit_priv	*pxmitpriv = &padapter->xmitpriv;
 	struct recv_priv	*precvpriv = &padapter->recvpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	int i,rx_queue_idx;
 
 	for(rx_queue_idx = 0; rx_queue_idx < RX_MAX_QUEUE; rx_queue_idx ++){	
@@ -328,7 +328,7 @@ void rtl8192ce_reset_desc_ring(_adapter * padapter)
 #ifdef CONFIG_64BIT_DMA
 u8 PlatformEnable92CEDMA64(PADAPTER Adapter)
 {
-	struct dvobj_priv	*pdvobjpriv = &Adapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(Adapter);
 	struct pci_dev	*pdev = pdvobjpriv->ppcidev;
 	u8	bResult = _TRUE;
 	u8	value;
@@ -371,7 +371,7 @@ void rtl8192ce_prepare_bcn_tasklet(void *priv)
 static void rtl8192ce_tx_isr(PADAPTER Adapter, int prio)
 {
 	struct xmit_priv	*pxmitpriv = &Adapter->xmitpriv;
-	struct dvobj_priv	*pdvobjpriv = &Adapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(Adapter);
 	struct rtw_tx_ring	*ring = &pxmitpriv->tx_ring[prio];
 #ifdef CONFIG_CONCURRENT_MODE
 	PADAPTER pbuddy_adapter = Adapter->pbuddy_adapter;
@@ -399,6 +399,8 @@ static void rtl8192ce_tx_isr(PADAPTER Adapter, int prio)
 			entry->txdw0 &= ~OWN;
 		}
 
+		rtw_sctx_done(&pxmitbuf->sctx);
+
 		rtw_free_xmitbuf(&(pxmitbuf->padapter->xmitpriv), pxmitbuf);
 	}
 
@@ -425,7 +427,7 @@ s32	rtl8192ce_interrupt(PADAPTER Adapter)
 {
 	_irqL	irqL;
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(Adapter);
-	struct dvobj_priv	*pdvobjpriv = &Adapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(Adapter);
 	struct xmit_priv	*pxmitpriv = &Adapter->xmitpriv;
 	RT_ISR_CONTENT	isr_content;
 	//PRT_ISR_CONTENT	pisr_content = &pdvobjpriv->isr_content;
@@ -583,7 +585,7 @@ static int rtl8192ce_if2_clone_recvframe(_adapter *sec_padapter, union recv_fram
 static void rtl8192ce_rx_mpdu(_adapter *padapter)
 {
 	struct recv_priv	*precvpriv = &padapter->recvpriv;
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	_queue			*pfree_recv_queue = &precvpriv->free_recv_queue;
 	union recv_frame	*precvframe = NULL;
 	struct phy_stat	*pphy_info = NULL;
@@ -636,7 +638,7 @@ static void rtl8192ce_rx_mpdu(_adapter *padapter)
 			pattrib = &precvframe->u.hdr.attrib;
 			if(pattrib->physt)
 			{
-				pphy_info = (struct phy_stat *)(skb->data + pattrib->shift_sz);
+				pphy_info = (struct phy_stat *)(skb->data);
 			}
 
 			//	Modified by Albert 20101213
@@ -753,7 +755,7 @@ void rtl8192ce_recv_tasklet(void *priv)
 	_irqL	irqL;
 	_adapter	*padapter = (_adapter*)priv;
 	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
-	struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 
 	rtl8192ce_rx_mpdu(padapter);
 	_enter_critical(&pdvobjpriv->irq_th_lock, &irqL);
@@ -831,7 +833,7 @@ void rtl8192ce_xmit_tasklet(void *priv)
 {
 	//_irqL irqL;
 	_adapter			*padapter = (_adapter*)priv;
-	//struct dvobj_priv	*pdvobjpriv = &padapter->dvobjpriv;
+	//struct dvobj_priv	*pdvobjpriv = adapter_to_dvobj(padapter);
 	//PRT_ISR_CONTENT	pisr_content = &pdvobjpriv->isr_content;
 
 	/*_enter_critical(&pdvobjpriv->irq_th_lock, &irqL);

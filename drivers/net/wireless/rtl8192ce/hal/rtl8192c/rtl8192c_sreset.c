@@ -86,10 +86,7 @@ static void _restore_network_status(_adapter *padapter)
 	rtw_write8(padapter, REG_DUAL_TSF_RST, (BIT(0)|BIT(1)));
 
 	//disable update TSF
-	if(IS_NORMAL_CHIP(pHalData->VersionID))
-		rtw_write8(padapter, REG_BCN_CTRL, rtw_read8(padapter, REG_BCN_CTRL)|BIT(4));		
-	else	
-		rtw_write8(padapter, REG_BCN_CTRL, rtw_read8(padapter, REG_BCN_CTRL)|BIT(4)|BIT(5));					
+	rtw_write8(padapter, REG_BCN_CTRL, rtw_read8(padapter, REG_BCN_CTRL)|BIT(4));
 
 	//=======================================================
 	rtw_joinbss_reset(padapter);

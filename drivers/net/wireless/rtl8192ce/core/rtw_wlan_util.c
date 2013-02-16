@@ -55,6 +55,23 @@ extern unsigned char RSN_TKIP_CIPHER[4];
 #define WAIT_FOR_BCN_TO_MIN	(6000)
 #define WAIT_FOR_BCN_TO_MAX	(20000)
 
+static u8 rtw_basic_rate_cck[4] = {
+	IEEE80211_CCK_RATE_1MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_2MB|IEEE80211_BASIC_RATE_MASK,
+	IEEE80211_CCK_RATE_5MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_11MB|IEEE80211_BASIC_RATE_MASK
+};
+
+static u8 rtw_basic_rate_ofdm[3] = {
+	IEEE80211_OFDM_RATE_6MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_OFDM_RATE_12MB|IEEE80211_BASIC_RATE_MASK,
+	IEEE80211_OFDM_RATE_24MB|IEEE80211_BASIC_RATE_MASK
+};
+
+static u8 rtw_basic_rate_mix[7] = {
+	IEEE80211_CCK_RATE_1MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_2MB|IEEE80211_BASIC_RATE_MASK,
+	IEEE80211_CCK_RATE_5MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_11MB|IEEE80211_BASIC_RATE_MASK,
+	IEEE80211_OFDM_RATE_6MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_OFDM_RATE_12MB|IEEE80211_BASIC_RATE_MASK,
+	IEEE80211_OFDM_RATE_24MB|IEEE80211_BASIC_RATE_MASK
+};
+
 
 int cckrates_included(unsigned char *rate, int ratelen)
 {
@@ -292,6 +309,55 @@ void get_rate_set(_adapter *padapter, unsigned char *pbssrate, int *bssrate_len)
 	_rtw_memcpy(pbssrate, supportedrates, *bssrate_len);
 }
 
+void UpdateBrateTbl(
+	IN PADAPTER		Adapter,
+	IN u8			*mBratesOS
+)
+{
+	u8	i;
+	u8	rate;
+
+	// 1M, 2M, 5.5M, 11M, 6M, 12M, 24M are mandatory.
+	for(i=0;i<NDIS_802_11_LENGTH_RATES_EX;i++)
+	{
+		rate = mBratesOS[i] & 0x7f;
+		switch(rate)
+		{
+			case IEEE80211_CCK_RATE_1MB:
+			case IEEE80211_CCK_RATE_2MB:
+			case IEEE80211_CCK_RATE_5MB:
+			case IEEE80211_CCK_RATE_11MB:
+			case IEEE80211_OFDM_RATE_6MB:
+			case IEEE80211_OFDM_RATE_12MB:
+			case IEEE80211_OFDM_RATE_24MB:
+				mBratesOS[i] |= IEEE80211_BASIC_RATE_MASK;
+				break;
+		}
+	}
+
+}
+
+void UpdateBrateTblForSoftAP(u8 *bssrateset, u32 bssratelen)
+{
+	u8	i;
+	u8	rate;
+
+	for(i=0;i<bssratelen;i++)
+	{
+		rate = bssrateset[i] & 0x7f;
+		switch(rate)
+		{
+			case IEEE80211_CCK_RATE_1MB:
+			case IEEE80211_CCK_RATE_2MB:
+			case IEEE80211_CCK_RATE_5MB:
+			case IEEE80211_CCK_RATE_11MB:
+				bssrateset[i] |= IEEE80211_BASIC_RATE_MASK;
+				break;
+		}
+	}
+
+}
+
 void Save_DM_Func_Flag(_adapter *padapter)
 {
 	u8	bSaveFlag = _TRUE;
@@ -471,11 +537,10 @@ void set_channel_bwmode(_adapter *padapter, unsigned char channel, unsigned char
 		}
 	}	
 
-	//set Channel
-#ifdef CONFIG_DUALMAC_Ccenter_chONCURRENT
-	dc_SelectChannel(padapter, center_ch);// set center channel
+	//set Channel , must be independant for correct co_ch value/
+#ifdef CONFIG_DUALMAC_CONCURRENT
+	dc_SelectChannel(padapter, center_ch);
 #else //CONFIG_DUALMAC_CONCURRENT
-
 	
 #ifdef CONFIG_CONCURRENT_MODE
 	_enter_critical_mutex(padapter->psetch_mutex, NULL);
@@ -488,12 +553,11 @@ void set_channel_bwmode(_adapter *padapter, unsigned char channel, unsigned char
 #ifdef CONFIG_CONCURRENT_MODE
 		if(padapter->pcodatapriv)
 		{
-			padapter->pcodatapriv->co_ch = channel;//save primary channel
+			padapter->pcodatapriv->co_ch = channel;
 		}
 #endif //CONFIG_CONCURRENT_MODE	
-		padapter->HalFunc.set_channel_handler(padapter, center_ch); // set center channel
-	}	
-	
+		padapter->HalFunc.set_channel_handler(padapter, center_ch);
+	}
 
 #ifdef CONFIG_CONCURRENT_MODE
 	_exit_critical_mutex(padapter->psetch_mutex, NULL);
@@ -501,7 +565,8 @@ void set_channel_bwmode(_adapter *padapter, unsigned char channel, unsigned char
 
 #endif // CONFIG_DUALMAC_CONCURRENT
 
-	
+
+	//set BandWidth
 	SetBWMode(padapter, bwmode, channel_offset);
 	
 }
@@ -960,14 +1025,13 @@ static void bwmode_update_check(_adapter *padapter, PNDIS_802_11_VARIABLE_IEs pI
 	
 	pHT_info = (struct HT_info_element *)pIE->data;
 
-	if(pmlmeext->cur_channel > 14 )
-	{
-		if( pregistrypriv->cbw40_enable & BIT(1) )
+	if (pmlmeext->cur_channel > 14) {
+		if (pregistrypriv->cbw40_enable & BIT(1))
+			cbw40_enable = 1;
+	} else {
+		if (pregistrypriv->cbw40_enable & BIT(0))
 			cbw40_enable = 1;
 	}
-	else
-		if( pregistrypriv->cbw40_enable & BIT(0) )
-			cbw40_enable = 0;
 	
 	if((pHT_info->infos[0] & BIT(2)) && cbw40_enable )
 	{
@@ -1121,9 +1185,13 @@ void HT_caps_handler(_adapter *padapter, PNDIS_802_11_VARIABLE_IEs pIE)
 		}
 	        #ifdef RTL8192C_RECONFIG_TO_1T1R
 		{
-			pmlmeinfo->HT_caps.HT_cap_element.MCS_rate[i] &= MCS_rate_1R[i];
+			pmlmeinfo->HT_caps.u.HT_cap_element.MCS_rate[i] &= MCS_rate_1R[i];
 		}
 		#endif
+
+		if(pregistrypriv->special_rf_path)
+			pmlmeinfo->HT_caps.u.HT_cap_element.MCS_rate[i] &= MCS_rate_1R[i];
+
 	}
 	
 	return;
@@ -1620,6 +1688,47 @@ void set_sta_rate(_adapter *padapter, struct sta_info *psta)
 	enable_rate_adaptive(padapter, psta->mac_id);
 }
 
+// Update RRSR and Rate for USERATE
+void update_tx_basic_rate(_adapter *padapter, u8 wirelessmode)
+{
+	NDIS_802_11_RATES_EX	supported_rates;
+	struct mlme_ext_priv	*pmlmeext = &padapter->mlmeextpriv;
+#ifdef CONFIG_P2P
+	struct wifidirect_info*	pwdinfo = &padapter->wdinfo;
+
+	//	Added by Albert 2011/03/22
+	//	In the P2P mode, the driver should not support the b mode.
+	//	So, the Tx packet shouldn't use the CCK rate
+	if(!rtw_p2p_chk_state(pwdinfo, P2P_STATE_NONE))
+		return;
+#endif //CONFIG_P2P
+#ifdef CONFIG_INTEL_WIDI
+	if (padapter->mlmepriv.widi_state != INTEL_WIDI_STATE_NONE)
+		return;
+#endif //CONFIG_INTEL_WIDI
+
+	_rtw_memset(supported_rates, 0, NDIS_802_11_LENGTH_RATES_EX);
+
+	//clear B mod if current channel is in 5G band, avoid tx cck rate in 5G band.
+	if(pmlmeext->cur_channel > 14)
+		wirelessmode &= ~(WIRELESS_11B);
+
+	if ((wirelessmode & WIRELESS_11B) && (wirelessmode == WIRELESS_11B)) {
+		_rtw_memcpy(supported_rates, rtw_basic_rate_cck, 4);
+	} else if (wirelessmode & WIRELESS_11B) {
+		_rtw_memcpy(supported_rates, rtw_basic_rate_mix, 7);
+	} else {
+		_rtw_memcpy(supported_rates, rtw_basic_rate_ofdm, 3);
+	}
+
+	if (wirelessmode & WIRELESS_11B)
+		update_mgnt_tx_rate(padapter, IEEE80211_CCK_RATE_1MB);
+	else
+		update_mgnt_tx_rate(padapter, IEEE80211_OFDM_RATE_6MB);
+
+	padapter->HalFunc.SetHwRegHandler(padapter, HW_VAR_BASIC_RATE, supported_rates);
+}
+
 unsigned char check_assoc_AP(u8 *pframe, uint len)
 {
 	unsigned int	i;
@@ -1789,12 +1898,16 @@ void update_capinfo(PADAPTER Adapter, u16 updateCap)
 
 void update_wireless_mode(_adapter *padapter)
 {
-	int ratelen, network_type = 0;
-	u16 SIFS_Timer;
+	u8	init_rate=0;
+	int	ratelen, network_type = 0;
+	u32	SIFS_Timer, mask;
 	struct mlme_ext_priv	*pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 	WLAN_BSSID_EX 		*cur_network = &(pmlmeinfo->network);
 	unsigned char			*rate = cur_network->SupportedRates;
+#ifdef CONFIG_CONCURRENT_MODE
+	_adapter *pbuddy_adapter = padapter->pbuddy_adapter;
+#endif //CONFIG_CONCURRENT_MODE
 
 	ratelen = rtw_get_rateset_len(cur_network->SupportedRates);
 
@@ -1834,13 +1947,36 @@ void update_wireless_mode(_adapter *padapter)
 	}
 
 	pmlmeext->cur_wireless_mode = network_type & padapter->registrypriv.wireless_mode;
+
+	//For STA mode, driver need to modify initial data rate, or MAC will use wrong tx rate.
+	//Modified by Thomas 2012-12-3
+	mask = update_supported_rate(cur_network->SupportedRates, ratelen);
+	init_rate = get_highest_rate_idx(mask)&0x3f;
+	padapter->HalFunc.SetHwRegHandler( padapter, HW_VAR_INIT_DATA_RATE,  (u8 *)&init_rate);
+	
+/*
 	if((pmlmeext->cur_wireless_mode==WIRELESS_11G) ||
 		(pmlmeext->cur_wireless_mode==WIRELESS_11BG))//WIRELESS_MODE_G)
 		SIFS_Timer = 0x0a0a;//CCK
 	else
 		SIFS_Timer = 0x0e0e;//pHalData->SifsTime; //OFDM
-	padapter->HalFunc.SetHwRegHandler( padapter, HW_VAR_SIFS,  (u8 *)&SIFS_Timer);
+*/
 	
+	SIFS_Timer = 0x0a0a0808; //0x0808 -> for CCK, 0x0a0a -> for OFDM
+                             //change this value if having IOT issues.
+		
+	padapter->HalFunc.SetHwRegHandler( padapter, HW_VAR_RESP_SIFS,  (u8 *)&SIFS_Timer);
+
+	if (pmlmeext->cur_wireless_mode & WIRELESS_11B)
+		update_mgnt_tx_rate(padapter, IEEE80211_CCK_RATE_1MB);
+	else
+	{
+		update_mgnt_tx_rate(padapter, IEEE80211_OFDM_RATE_6MB);
+#ifdef CONFIG_CONCURRENT_MODE
+		if(pbuddy_adapter && (pmlmeext->cur_wireless_mode & WIRELESS_11A))
+			update_mgnt_tx_rate(pbuddy_adapter, IEEE80211_OFDM_RATE_6MB);
+#endif //CONFIG_CONCURRENT_MODE
+	}
 }
 
 void fire_write_MAC_cmd(_adapter *padapter, unsigned int addr, unsigned int value);
@@ -1871,13 +2007,6 @@ void fire_write_MAC_cmd(_adapter *padapter, unsigned int addr, unsigned int valu
 #endif	
 }
 
-u8 bmc_support_rate_ofdm[4] = 
-	{IEEE80211_OFDM_RATE_6MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_OFDM_RATE_12MB|IEEE80211_BASIC_RATE_MASK,
-	IEEE80211_OFDM_RATE_18MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_OFDM_RATE_24MB|IEEE80211_BASIC_RATE_MASK};
-u8 bmc_support_rate_cck[4] =
-	{IEEE80211_CCK_RATE_1MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_2MB|IEEE80211_BASIC_RATE_MASK,
-	IEEE80211_CCK_RATE_5MB|IEEE80211_BASIC_RATE_MASK, IEEE80211_CCK_RATE_11MB|IEEE80211_BASIC_RATE_MASK};
-
 void update_bmc_sta_support_rate(_adapter *padapter, u32 mac_id)
 {
 	struct mlme_ext_priv	*pmlmeext = &(padapter->mlmeextpriv);
@@ -1886,11 +2015,11 @@ void update_bmc_sta_support_rate(_adapter *padapter, u32 mac_id)
 	if(pmlmeext->cur_wireless_mode & WIRELESS_11B)
 	{
 		// Only B, B/G, and B/G/N AP could use CCK rate
-		_rtw_memcpy((pmlmeinfo->FW_sta_info[mac_id].SupportedRates), bmc_support_rate_cck, 4);
+		_rtw_memcpy((pmlmeinfo->FW_sta_info[mac_id].SupportedRates), rtw_basic_rate_cck, 4);
 	}
 	else
 	{
-		_rtw_memcpy((pmlmeinfo->FW_sta_info[mac_id].SupportedRates), bmc_support_rate_ofdm, 4);
+		_rtw_memcpy((pmlmeinfo->FW_sta_info[mac_id].SupportedRates), rtw_basic_rate_ofdm, 3);
 	}
 }
 
@@ -2083,4 +2212,57 @@ unsigned int setup_beacon_frame(_adapter *padapter, unsigned char *beacon_frame)
 	return (len + TXDESC_SIZE);
 }
 #endif
+
+static _adapter *pbuddy_padapter = NULL;
+
+int rtw_handle_dualmac(_adapter *adapter, bool init)
+{
+	int status = _SUCCESS;
+	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
+
+	if (init) {
+		if ((dvobj->NumInterfaces == 2) && (adapter->registrypriv.mac_phy_mode != 1)) {
+			dvobj->DualMacMode = _TRUE;
+			// temply disable IPS For 92D-VC
+			adapter->registrypriv.ips_mode = IPS_NONE;
+		}
+		
+		/* For SMSP on 92DU-VC, driver do not probe another Interface. */
+		if ((dvobj->DualMacMode != _TRUE) && (dvobj->InterfaceNumber != 0)) {
+			DBG_871X("%s(): Do not init another USB Interface because SMSP\n",__FUNCTION__);
+			status = _FAIL;
+			goto exit;
+		}
+		
+		if (pbuddy_padapter == NULL) {
+			pbuddy_padapter = adapter;
+			DBG_871X("%s(): pbuddy_padapter == NULL, Set pbuddy_padapter\n",__FUNCTION__);
+		} else {
+			adapter->pbuddy_adapter = pbuddy_padapter;
+			pbuddy_padapter->pbuddy_adapter = adapter;
+			// clear global value
+			pbuddy_padapter = NULL;
+			DBG_871X("%s(): pbuddy_padapter exist, Exchange Information\n",__FUNCTION__);
+		}
+#ifdef CONFIG_DUALMAC_CONCURRENT
+		if (dvobj->InterfaceNumber == 0) {
+			//set adapter_type/iface type
+			adapter->isprimary = _TRUE;
+			adapter->adapter_type = PRIMARY_ADAPTER;
+			adapter->iface_type = IFACE_PORT0;
+			DBG_871X("%s(): PRIMARY_ADAPTER\n",__FUNCTION__);
+		} else {
+			//set adapter_type/iface type
+			adapter->isprimary = _FALSE;
+			adapter->adapter_type = SECONDARY_ADAPTER;
+			adapter->iface_type = IFACE_PORT1;
+			DBG_871X("%s(): SECONDARY_ADAPTER\n",__FUNCTION__);
+		}
+#endif
+	}else {
+		pbuddy_padapter = NULL;
+	}
+exit:
+	return status;
+}
 

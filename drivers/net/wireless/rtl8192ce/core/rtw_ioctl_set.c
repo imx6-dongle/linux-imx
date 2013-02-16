@@ -24,7 +24,7 @@
 #include <osdep_service.h>
 #include <drv_types.h>
 #include <rtw_ioctl_set.h>
-#include <hal_init.h>
+#include <hal_intf.h>
 
 #ifdef CONFIG_USB_HCI
 #include <usb_osintf.h>
@@ -599,19 +599,6 @@ _func_enter_;
 		RT_TRACE(_module_rtl871x_ioctl_set_c_,_drv_info_,(" change mode!"));
 		//DBG_871X("change mode, old_mode=%d, new_mode=%d, fw_state=0x%x\n", *pold_state, networktype, get_fwstate(pmlmepriv));
 
-		if((check_fwstate(pmlmepriv, _FW_LINKED)== _TRUE) ||(*pold_state==Ndis802_11IBSS))
-			rtw_disassoc_cmd(padapter);
-
-		if((check_fwstate(pmlmepriv, _FW_LINKED)== _TRUE) ||
-			(check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE)== _TRUE) )
-			rtw_free_assoc_resources(padapter, 1);
-
-
-		if((check_fwstate(pmlmepriv, _FW_LINKED)== _TRUE) || (*pold_state==Ndis802_11Infrastructure) ||(*pold_state==Ndis802_11IBSS))
-		{		
-			rtw_indicate_disconnect(padapter); //will clr Linked_state; before this function, we must have chked whether  issue dis-assoc_cmd or not
-		}	
-	
 		if(*pold_state==Ndis802_11APMode)
 		{		
 			//change to other mode from Ndis802_11APMode			
@@ -621,12 +608,25 @@ _func_enter_;
 			stop_ap_mode(padapter);
 #endif
 		}	
-		
+
+		if((check_fwstate(pmlmepriv, _FW_LINKED)== _TRUE) ||(*pold_state==Ndis802_11IBSS))
+			rtw_disassoc_cmd(padapter);
+
+		if((check_fwstate(pmlmepriv, _FW_LINKED)== _TRUE) ||
+			(check_fwstate(pmlmepriv, WIFI_ADHOC_MASTER_STATE)== _TRUE) )
+			rtw_free_assoc_resources(padapter, 1);
+
+		if((*pold_state == Ndis802_11Infrastructure) ||(*pold_state == Ndis802_11IBSS))
+	       {
+			if(check_fwstate(pmlmepriv, _FW_LINKED) == _TRUE)
+			{		
+				rtw_indicate_disconnect(padapter); //will clr Linked_state; before this function, we must have chked whether  issue dis-assoc_cmd or not
+			}
+	       }
+
 		*pold_state = networktype;
 
-				// clear WIFI_STATION_STATE; WIFI_AP_STATE; WIFI_ADHOC_STATE; WIFI_ADHOC_MASTER_STATE
-		//pmlmepriv->fw_state &= 0xffffff87;		
-		_clr_fwstate_(pmlmepriv, WIFI_STATION_STATE|WIFI_AP_STATE|WIFI_ADHOC_STATE|WIFI_ADHOC_MASTER_STATE);
+		_clr_fwstate_(pmlmepriv, ~WIFI_NULL_STATE);
 				
 		switch(networktype)
 		{
@@ -1427,16 +1427,20 @@ int rtw_set_channel_plan(_adapter *adapter, u8 channel_plan)
 */
 int rtw_set_country(_adapter *adapter, const char *country_code)
 {
-	int channel_plan = RT_CHANNEL_DOMAIN_FCC;
+	int channel_plan = RT_CHANNEL_DOMAIN_WORLD_WIDE_5G;
+
+	DBG_871X("%s country_code:%s\n", __func__, country_code);
 
 	//TODO: should have a table to match country code and RT_CHANNEL_DOMAIN
-	//TODO: should consider 2-character and 3-character counter code
+	//TODO: should consider 2-character and 3-character country code
 	if(0 == strcmp(country_code, "US"))
 		channel_plan = RT_CHANNEL_DOMAIN_FCC;
 	else if(0 == strcmp(country_code, "EU"))
 		channel_plan = RT_CHANNEL_DOMAIN_ETSI;
 	else if(0 == strcmp(country_code, "JP"))
 		channel_plan = RT_CHANNEL_DOMAIN_MKK;
+	else if(0 == strcmp(country_code, "CN"))
+		channel_plan = RT_CHANNEL_DOMAIN_CHINA;
 	else
 		DBG_871X("%s unknown country_code:%s\n", __FUNCTION__, country_code);
 	

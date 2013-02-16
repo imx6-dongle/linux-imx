@@ -379,7 +379,7 @@ int rtw_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		break;
 		
 	case ANDROID_WIFI_CMD_SCAN_ACTIVE:
-		rtw_set_scan_mode((_adapter *)rtw_netdev_priv(net), SCAN_ACTIVE);
+		//rtw_set_scan_mode((_adapter *)rtw_netdev_priv(net), SCAN_ACTIVE);
 #ifdef CONFIG_PLATFORM_MSTAR_TITANIA12		
 #ifdef CONFIG_IOCTL_CFG80211
 		(wdev_to_priv(net->ieee80211_ptr))->bandroid_scan = _TRUE;	
@@ -387,7 +387,7 @@ int rtw_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif //CONFIG_PLATFORM_MSTAR_TITANIA12
 		break;
 	case ANDROID_WIFI_CMD_SCAN_PASSIVE:
-		rtw_set_scan_mode((_adapter *)rtw_netdev_priv(net), SCAN_PASSIVE);
+		//rtw_set_scan_mode((_adapter *)rtw_netdev_priv(net), SCAN_PASSIVE);
 		break;
 		
 	case ANDROID_WIFI_CMD_RSSI:

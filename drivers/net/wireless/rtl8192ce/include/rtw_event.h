@@ -91,7 +91,8 @@ struct stassoc_event {
 
 struct stadel_event {
  unsigned char macaddr[6];
- unsigned char rsvd[2]; 
+ unsigned char rsvd[2]; //for reason
+ int mac_id;
 };
 
 struct addba_event

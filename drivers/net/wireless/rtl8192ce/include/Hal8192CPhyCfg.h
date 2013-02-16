@@ -155,19 +155,6 @@ typedef	enum _RF_TYPE_8190P{
 	RF_PSEUDO_11N=5,	// 5, It is a temporality RF. 
 }RF_TYPE_8190P_E,*PRF_TYPE_8190P_E;
 
-
-typedef enum _RATR_TABLE_MODE_8192C{
-	RATR_INX_WIRELESS_NGB = 0,
-	RATR_INX_WIRELESS_NG = 1,
-	RATR_INX_WIRELESS_NB = 2,
-	RATR_INX_WIRELESS_N = 3,
-	RATR_INX_WIRELESS_GB = 4,
-	RATR_INX_WIRELESS_G = 5,
-	RATR_INX_WIRELESS_B = 6,
-	RATR_INX_WIRELESS_MC = 7,
-	RATR_INX_WIRELESS_A = 8,
-}RATR_TABLE_MODE_8192C, *PRATR_TABLE_MODE_8192C;
-
 typedef struct _BB_REGISTER_DEFINITION{
 	u32 rfintfs;			// set software control: 
 							//		0x870~0x877[8 bytes]
@@ -400,8 +387,6 @@ VOID rtl8192c_PHY_LCCalibrate(IN	PADAPTER	pAdapter);
 // AP calibrate
 //
 VOID rtl8192c_PHY_APCalibrate(IN	PADAPTER	pAdapter, IN 	char		delta);
-
-VOID rtl8192c_PHY_DigitalPredistortion(IN	PADAPTER	pAdapter);
 
 VOID rtl8192c_PHY_SetRFPathSwitch(IN	PADAPTER	pAdapter, IN	BOOLEAN		bMain);
 
