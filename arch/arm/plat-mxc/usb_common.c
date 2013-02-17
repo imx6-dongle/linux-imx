@@ -57,6 +57,7 @@ static  driver_vbus_func s_otg_driver_vbus;
 
 EXPORT_SYMBOL(imx_otg_base);
 
+#define DISABLE_STOP_MODE
 #define MXC_NUMBER_USB_TRANSCEIVER 6
 struct fsl_xcvr_ops *g_xc_ops[MXC_NUMBER_USB_TRANSCEIVER] = { NULL };
 
