@@ -140,11 +140,11 @@ static void imx6q_hdmidongle_usbotg_vbus(bool on)
 	if (on) {
 		gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 1);
 		printk(KERN_ERR "%s:HDMIDONGLE_USB_OTG_PWR = 1\n", __func__);
-		msleep(1000);
+		//msleep(1000);
 	} else {
 		gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 0);
 		printk(KERN_ERR "%s:HDMIDONGLE_USB_OTG_PWR = 0\n", __func__);
-		msleep(1000);
+		//msleep(1000);
 	}
 }
 
@@ -426,12 +426,12 @@ static void __init mx6_hdmidongle_board_init(void)
 
 	imx6q_add_dvfs_core(&hdmidongle_dvfscore_data);
 
-	mx6_cpu_regulator_init();
+	//mx6_cpu_regulator_init();
 
 	imx6q_add_hdmi_soc();
 	imx6q_add_hdmi_soc_dai();
 
-	gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
+	/*gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
 	gpio_direction_output(HDMIDONGLE_BT_RST, 1);
 	gpio_set_value(HDMIDONGLE_BT_RST, 1);
 	printk(KERN_ERR "%s: bt_reset\n", __func__);
@@ -447,7 +447,7 @@ static void __init mx6_hdmidongle_board_init(void)
 	gpio_direction_output(HDMIDONGLE_WL_EN, 1);
 	gpio_set_value(HDMIDONGLE_WL_EN, 1);
 	printk(KERN_ERR "%s: wl_en\n", __func__);
-	msleep(1000);
+	msleep(1000);*/
 
 	pm_power_off = mx6_snvs_poweroff;
 	imx6q_add_busfreq();
