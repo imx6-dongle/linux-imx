@@ -74,9 +74,7 @@
 #define HDMIDONGLE_HDMI_CEC_IN	IMX_GPIO_NR(4, 11)
 
 
-#define HDMIDONGLE_BT_RST	IMX_GPIO_NR(3, 7)
-#define HDMIDONGLE_BT_EN	IMX_GPIO_NR(3, 9)
-#define HDMIDONGLE_WL_EN        IMX_GPIO_NR(3, 10)
+#define HDMIDONGLE_WL_EN        IMX_GPIO_NR(2, 0)
 
 #define HDMIDONGLE_SD2_CD		IMX_GPIO_NR(1, 4)
 #define HDMIDONGLE_REVA_POWER_KEY	IMX_GPIO_NR(6, 16)
@@ -442,12 +440,12 @@ static void __init mx6_hdmidongle_board_init(void)
 	gpio_set_value(HDMIDONGLE_BT_EN, 1);
 	printk(KERN_ERR "%s: bt_en\n", __func__);
 	msleep(1000);
+    */
 
 	gpio_request(HDMIDONGLE_WL_EN, "wl_en");
 	gpio_direction_output(HDMIDONGLE_WL_EN, 1);
-	gpio_set_value(HDMIDONGLE_WL_EN, 1);
+	gpio_set_value(HDMIDONGLE_WL_EN, 0);
 	printk(KERN_ERR "%s: wl_en\n", __func__);
-	msleep(1000);*/
 
 	pm_power_off = mx6_snvs_poweroff;
 	imx6q_add_busfreq();
