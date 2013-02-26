@@ -393,6 +393,8 @@ static void __init mx6_hdmidongle_board_init(void)
 
 	imx6q_add_imx_snvs_rtc();
 
+	imx6q_add_imx_caam();
+
 	imx6q_add_imx_i2c(1, &mx6q_hdmidongle_i2c_data);
 	imx6q_add_imx_i2c(2, &mx6q_hdmidongle_i2c_data);
     
