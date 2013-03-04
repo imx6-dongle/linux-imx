@@ -71,21 +71,15 @@
 
 #define HDMIDONGLE_USB_OTG_PWR	IMX_GPIO_NR(4, 15)
 #define HDMIDONGLE_USB_H1_PWR	IMX_GPIO_NR(4, 14)
+
+#define HDMIDONGLE_ECSPI2_CS0   IMX_GPIO_NR(2, 26)
 #define HDMIDONGLE_HDMI_CEC_IN	IMX_GPIO_NR(4, 11)
 
-
+//#define HDMIDONGLE_BT_RST     IMX_GPIO_NR(3, 7)
+//#define HDMIDONGLE_BT_EN      IMX_GPIO_NR(3, 9)
 #define HDMIDONGLE_WL_EN        IMX_GPIO_NR(2, 0)
 
-#define HDMIDONGLE_SD2_CD		IMX_GPIO_NR(6, 11)
-#define HDMIDONGLE_REVA_POWER_KEY	IMX_GPIO_NR(6, 16)
-
-#ifdef CONFIG_IMX_PCIE
-#define HDMIDONGLE_PCIE_PWR_EN	IMX_GPIO_NR(3, 7) /*fake pcie power enable */
-#define HDMIDONGLE_PCIE_RST 	IMX_GPIO_NR(3, 9)
-#define HDMIDONGLE_PCIE_WAKE	IMX_GPIO_NR(3, 22)
-#define HDMIDONGLE_PCIE_DIS		IMX_GPIO_NR(3, 10)
-static struct wake_lock pcie_wake_lock;
-#endif
+#define HDMIDONGLE_SD2_CD	IMX_GPIO_NR(6, 11)
 
 extern char *gp_reg_id;
 extern char *soc_reg_id;
@@ -120,10 +114,6 @@ static inline void mx6q_hdmidongle_init_uart(void)
 	imx6q_add_imx_uart(3, NULL);
 }
 
-static struct i2c_board_info mxc_i2c2_board_info[] __initdata = {
-};
-
-
 static struct imxi2c_platform_data mx6q_hdmidongle_i2c_data = {
 	.bitrate = 100000,
 };
@@ -135,43 +125,21 @@ static struct i2c_board_info mxc_i2c1_board_info[] __initdata = {
 };
 
 
+
 static void imx6q_hdmidongle_usbotg_vbus(bool on)
 {
-	if (on) {
-		gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 1);
-		printk(KERN_ERR "%s:HDMIDONGLE_USB_OTG_PWR = 1\n", __func__);
-		//msleep(1000);
-	} else {
-		gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 0);
-		printk(KERN_ERR "%s:HDMIDONGLE_USB_OTG_PWR = 0\n", __func__);
-		//msleep(1000);
-	}
+	if (on)
+	  gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 1);
+	else
+	  gpio_set_value(HDMIDONGLE_USB_OTG_PWR, 0);
 }
 
 static void __init imx6q_hdmidongle_init_usb(void)
 {
-	int ret = 0;
-
 	imx_otg_base = MX6_IO_ADDRESS(MX6Q_USB_OTG_BASE_ADDR);
-	/* disable external charger detect,
-	 * or it will affect signal quality at dp .
-	 */
-	ret = gpio_request(HDMIDONGLE_USB_OTG_PWR, "usb-pwr");
-	if (ret) {
-		pr_err("failed to get GPIO HDMIDONGLE_USB_OTG_PWR: %d\n",
-			ret);
-		return;
-	}
-	gpio_direction_output(HDMIDONGLE_USB_OTG_PWR, 0);
-	/* keep USB host1 VBUS always on */
-	ret = gpio_request(HDMIDONGLE_USB_H1_PWR, "usb-h1-pwr");
-	if (ret) {
-		pr_err("failed to get GPIO HDMIDONGLE_USB_H1_PWR: %d\n",
-			ret);
-		return;
-	}
-	gpio_direction_output(HDMIDONGLE_USB_H1_PWR, 1);
+
 	mxc_iomux_set_gpr_register(1, 13, 1, 1);
+
 	mx6_set_otghost_vbus_func(imx6q_hdmidongle_usbotg_vbus);
 }
 
@@ -184,8 +152,9 @@ static struct viv_gpu_platform_data imx6q_gpu_pdata __initdata = {
 static struct ipuv3_fb_platform_data hdmidongle_fb_data[] = {
 	{/*fb0*/
 	.disp_dev = "hdmi",
-	.interface_pix_fmt = IPU_PIX_FMT_RGB24,
-	.mode_str = "1920x1080M@60",
+	//.interface_pix_fmt = IPU_PIX_FMT_RGB24,
+        .interface_pix_fmt = IPU_PIX_FMT_RGB32,
+	.mode_str = "1280x720M@60",
 	.default_bpp = 32,
 	.int_clk = false,
 	},
@@ -252,6 +221,20 @@ static struct imx_ipuv3_platform_data ipu_data[] = {
 	.csi_clk[0] = "clko_clk",
 	},
 };
+
+#if defined(CONFIG_ION)
+static struct ion_platform_data imx_ion_data = {
+  .nr = 1,
+  .heaps = {
+    {
+      .id = 0,
+      .type = ION_HEAP_TYPE_CARVEOUT,
+      .name = "vpu_ion",
+      .size = SZ_64M,
+    },
+  },
+};
+#endif
 
 static void hdmidongle_suspend_enter(void)
 {
@@ -355,15 +338,6 @@ static void mx6_snvs_poweroff(void)
 	writel(value | 0x60, mx6_snvs_base + SNVS_LPCR);
 }
 
-#ifdef CONFIG_IMX_PCIE
-static const struct imx_pcie_platform_data mx6_hdmidongle_pcie_data __initconst = {
-	.pcie_pwr_en	= HDMIDONGLE_PCIE_PWR_EN,
-	.pcie_rst	= HDMIDONGLE_PCIE_RST,
-	.pcie_wake_up	= HDMIDONGLE_PCIE_WAKE,
-	.pcie_dis	= HDMIDONGLE_PCIE_DIS,
-};
-#endif
-
 /*!
  * Board specific initialization.
  */
@@ -371,7 +345,7 @@ static void __init mx6_hdmidongle_board_init(void)
 {
 	int i;
 
-	mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_rev_a_pads, ARRAY_SIZE(mx6q_hdmidongle_rev_a_pads));
+        mxc_iomux_v3_setup_multiple_pads(mx6q_hdmidongle_pads,ARRAY_SIZE(mx6q_hdmidongle_pads));
 
 	gp_reg_id = hdmidongle_dvfscore_data.reg_id;
 	soc_reg_id = hdmidongle_dvfscore_data.soc_id;
@@ -402,9 +376,6 @@ static void __init mx6_hdmidongle_board_init(void)
 			ARRAY_SIZE(mxc_i2c1_board_info));
 
 
-	i2c_register_board_info(2, mxc_i2c2_board_info,
-			ARRAY_SIZE(mxc_i2c2_board_info));
-
 	imx6q_add_mxc_hdmi(&hdmi_data);
 
 	imx6q_add_anatop_thermal_imx(1, &mx6q_hdmidongle_anatop_thermal_data);
@@ -428,28 +399,31 @@ static void __init mx6_hdmidongle_board_init(void)
 
 	imx6q_add_dvfs_core(&hdmidongle_dvfscore_data);
 
-	//mx6_cpu_regulator_init();
+        #ifndef CONFIG_MX6_INTER_LDO_BYPASS
+        mx6_cpu_regulator_init();
+        #endif
+
+        #if defined(CONFIG_ION)
+        imx6q_add_ion(0, &imx_ion_data,
+		      sizeof(imx_ion_data) + sizeof(struct ion_platform_heap));
+        #endif
 
 	imx6q_add_hdmi_soc();
 	imx6q_add_hdmi_soc_dai();
 
-	/*gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
-	gpio_direction_output(HDMIDONGLE_BT_RST, 1);
-	gpio_set_value(HDMIDONGLE_BT_RST, 1);
-	printk(KERN_ERR "%s: bt_reset\n", __func__);
-	msleep(1000);
-
-	gpio_request(HDMIDONGLE_BT_EN, "bt_en");
-	gpio_direction_output(HDMIDONGLE_BT_EN, 1);
-	gpio_set_value(HDMIDONGLE_BT_EN, 1);
-	printk(KERN_ERR "%s: bt_en\n", __func__);
-	msleep(1000);
-    */
+        // gpio_request(HDMIDONGLE_BT_RST, "bt_reset");
+        // gpio_direction_output(HDMIDONGLE_BT_RST, 1);
+        // gpio_set_value(HDMIDONGLE_BT_RST, 1);
+        // msleep(1000);
+        // gpio_request(HDMIDONGLE_BT_EN, "bt_en");
+        // gpio_direction_output(HDMIDONGLE_BT_EN, 1);
+        // gpio_set_value(HDMIDONGLE_BT_EN, 1);
+	// msleep(1000);
 
 	gpio_request(HDMIDONGLE_WL_EN, "wl_en");
 	gpio_direction_output(HDMIDONGLE_WL_EN, 1);
 	gpio_set_value(HDMIDONGLE_WL_EN, 0);
-	printk(KERN_ERR "%s: wl_en\n", __func__);
+	msleep(1000);
 
 	pm_power_off = mx6_snvs_poweroff;
 	imx6q_add_busfreq();
@@ -485,6 +459,13 @@ static void __init mx6q_hdmidongle_reserve(void)
 		memblock_remove(phys, imx6q_gpu_pdata.reserved_mem_size);
 		imx6q_gpu_pdata.reserved_mem_base = phys;
 	}
+#endif
+#if defined(CONFIG_ION)
+        if (imx_ion_data.heaps[0].size) {
+	  phys = memblock_alloc(imx_ion_data.heaps[0].size, SZ_4K);
+	  memblock_remove(phys, imx_ion_data.heaps[0].size);
+	  imx_ion_data.heaps[0].base = phys;
+        }
 #endif
 
 	for (i = 0; i < ARRAY_SIZE(hdmidongle_fb_data); i++)
