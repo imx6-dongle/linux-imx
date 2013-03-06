@@ -1,8 +1,8 @@
 config RTL8192CU
 	tristate "Realtek 8192C USB WiFi"
 	depends on USB
-        select CONFIG_RTL8192C
-        select CONFIG_USB_HCI
+    select WIRELESS_EXT
+    select WEXT_PRIV
 	---help---
 	  Help message of RTL8192CU
 
