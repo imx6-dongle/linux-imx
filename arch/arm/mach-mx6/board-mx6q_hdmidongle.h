@@ -22,8 +22,8 @@
 
 static iomux_v3_cfg_t mx6q_hdmidongle_pads[] = {
 
-	/* Match GK802 Android IOMUX Config although we don't know if theirs 
-	 * is completely correct */
+	/* Match GK802 Android IOMUX Config although we don't know if theirs is
+	 * completely correct */
 
 	/* UART 2 */
 	MX6Q_PAD_EIM_D26__UART2_TXD,
@@ -46,7 +46,7 @@ static iomux_v3_cfg_t mx6q_hdmidongle_pads[] = {
 
 	/* GPI02 */
 	MX6Q_PAD_EIM_EB2__GPIO_2_30,
-        MX6Q_PAD_EIM_CS0__GPIO_2_23,
+	MX6Q_PAD_EIM_CS0__GPIO_2_23,
 	MX6Q_PAD_EIM_CS1__GPIO_2_24,
 	MX6Q_PAD_EIM_EB3__GPIO_2_31,
 
@@ -111,7 +111,7 @@ static iomux_v3_cfg_t mx6q_hdmidongle_pads[] = {
 
 	MX6Q_PAD_SD4_DAT6__USDHC4_DAT6_50MHZ,
 
-	/*HDMI CEC communication PIN*/
+	/* HDMI CEC communication PIN */
 	MX6Q_PAD_KEY_ROW2__HDMI_TX_CEC_LINE,
 
 	/* USBOTG ID pin */
