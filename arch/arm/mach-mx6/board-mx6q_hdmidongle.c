@@ -399,10 +399,6 @@ static void __init mx6_hdmidongle_board_init(void)
 
 	imx6q_add_dvfs_core(&hdmidongle_dvfscore_data);
 
-        #ifndef CONFIG_MX6_INTER_LDO_BYPASS
-        mx6_cpu_regulator_init();
-        #endif
-
         #if defined(CONFIG_ION)
         imx6q_add_ion(0, &imx_ion_data,
 		      sizeof(imx_ion_data) + sizeof(struct ion_platform_heap));
