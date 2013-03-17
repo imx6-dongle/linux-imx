@@ -117,6 +117,10 @@ static iomux_v3_cfg_t mx6q_hdmidongle_pads[] = {
 	/* USBOTG ID pin */
 	MX6Q_PAD_GPIO_1__USBOTG_ID,
 
+	/* I2C2 Enable HDMI pins for correct detection  */
+	MX6Q_PAD_KEY_COL3__I2C2_SCL,  /* GPIO4[12] */
+	MX6Q_PAD_KEY_ROW3__I2C2_SDA,  /* GPIO4[13] */
+
 	/** Additional tweaks to IOMUX **/
 
 	/* SD 3 */
