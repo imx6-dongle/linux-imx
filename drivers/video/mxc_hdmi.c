@@ -187,7 +187,7 @@ static bool hdmi_inited;
 extern const struct fb_videomode mxc_cea_mode[64];
 extern void mxc_hdmi_cec_handle(u16 cec_stat);
 #ifdef DEBUG
-static void dump_fb_videomode(struct fb_videomode *m)
+static void dump_fb_videomode(const struct fb_videomode *m)
 {
 	pr_debug("fb_videomode = %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
 		m->refresh, m->xres, m->yres, m->pixclock, m->left_margin,
@@ -1538,8 +1538,7 @@ static void mxc_hdmi_edid_rebuild_modelist(struct mxc_hdmi *hdmi)
 		 */
 		mode = &hdmi->fbi->monspecs.modedb[i];
 
-		if (!(mode->vmode & FB_VMODE_INTERLACED) &&
-				(mxc_edid_mode_to_vic(mode) != 0)) {
+		if (!(mode->vmode & FB_VMODE_INTERLACED)) {
 
 			dev_dbg(&hdmi->pdev->dev, "Added mode %d:", i);
 			dev_dbg(&hdmi->pdev->dev,
@@ -1599,31 +1598,57 @@ static void mxc_hdmi_set_mode_to_vga_dvi(struct mxc_hdmi *hdmi)
 	hdmi->requesting_vga_for_initialization = false;
 }
 
+static const struct fb_videomode *mxc_hdmi_default_mode(struct mxc_hdmi *hdmi) {
+	struct fb_var_screeninfo var;
+	int ret, i;
+	const struct fb_videomode *mode;
+	struct fb_videomode m;
+	const struct fb_monspecs *specs;
+	
+	var.xres = 0;
+	var.yres = 0;
+	mode = fb_find_best_mode(&var, &hdmi->fbi->modelist);
+
+	specs = &hdmi->fbi->monspecs;
+	if (specs->misc & FB_MISC_1ST_DETAIL) {
+		for (i = 0; i < specs->modedb_len; i++) {
+			if (specs->modedb[i].flag & FB_MODE_IS_DETAILED) {
+				mode = &specs->modedb[i];
+				break;
+			}
+		}
+	}
+
+	if (strlen(hdmi->dft_mode_str)) {
+		ret = fb_find_mode(&var, hdmi->fbi,
+						   hdmi->dft_mode_str, NULL, 0, mode,
+						   hdmi->default_bpp);
+		if (ret==1 || ret==2) {
+			fb_var_to_videomode(&m, &var);
+			mode = &m;
+		}
+	}
+
+	return fb_find_nearest_mode(mode, &hdmi->fbi->modelist);
+}
+
+
 static void mxc_hdmi_set_mode(struct mxc_hdmi *hdmi)
 {
 	const struct fb_videomode *mode;
-	struct fb_videomode m;
-	struct fb_var_screeninfo var;
 
 	dev_dbg(&hdmi->pdev->dev, "%s\n", __func__);
 
 	/* Set the default mode only once. */
 	if (!hdmi->dft_mode_set) {
-		dev_dbg(&hdmi->pdev->dev, "%s: setting to default=%s bpp=%d\n",
-			__func__, hdmi->dft_mode_str, hdmi->default_bpp);
-
-		fb_find_mode(&var, hdmi->fbi,
-			     hdmi->dft_mode_str, NULL, 0, NULL,
-			     hdmi->default_bpp);
-
+		mode = mxc_hdmi_default_mode(hdmi);
 		hdmi->dft_mode_set = true;
-	} else
-		fb_videomode_to_var(&var, &hdmi->previous_non_vga_mode);
+	} else {
+		mode = &hdmi->previous_non_vga_mode;
+	}
 
-	fb_var_to_videomode(&m, &var);
-	dump_fb_videomode(&m);
+	dump_fb_videomode(mode);
 
-	mode = fb_find_nearest_mode(&m, &hdmi->fbi->modelist);
 	if (!mode) {
 		pr_err("%s: could not find mode in modelist\n", __func__);
 		return;
