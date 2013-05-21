@@ -4641,7 +4641,7 @@ unsigned int OnAction_p2p(_adapter *padapter, union recv_frame *precv_frame)
 	struct	wifidirect_info	*pwdinfo = &( padapter->wdinfo );
 	
 
-	DBG_871X("%s\n", __FUNCTION__);
+	//DBG_871X("%s\n", __FUNCTION__);
 	
 	//check RA matches or not
 	if (!_rtw_memcmp(myid(&(padapter->eeprompriv)), GetAddr1Ptr(pframe), ETH_ALEN))//for if1, sta/ap mode
