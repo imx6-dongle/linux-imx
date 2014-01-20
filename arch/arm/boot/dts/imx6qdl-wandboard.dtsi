@@ -61,26 +61,17 @@
 			gpio = <&gpio3 22 0>;
 			enable-active-high;
 		};
+#endif
 
-		wilink_wl_en: tiwi_wlan {
+		brcm_wl_bt_en: brcm_wlan {
 			compatible = "regulator-fixed";
-			regulator-name = "wilink_wl_en";
+			regulator-name = "brcm_wl_bt_en";
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
-			gpio = <&gpio6 15 0>;
+			gpio = <&gpio1 26 0>;
 			startup-delay-us = <70000>;
 			enable-active-high;
 		};
-
-		wilink_bt_en: tiwi_bt {
-			compatible = "regulator-fixed";
-			regulator-name = "wilink_bt_en";
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
-			gpio = <&gpio6 16 0>;
-			enable-active-high;
-		};
-#endif
 	};
 
 
@@ -214,14 +205,6 @@
 	};
 	status = "disabled";
 };
-
-&wlan_bt_rfkill {
-	compatible = "net,rfkill-reg";
-	name = "wlan_bt_rfkill";
-	type = <2>;     /* bluetooth */
-	vrfkill-supply = <&wilink_bt_en>;
-	status = "disabled";
-};
 #endif
 
 &fec {
@@ -275,7 +258,7 @@
 	ov5640_mipi: ov5640_mipi@3c {
 		compatible = "ovti,ov5640_mipi";
 		reg = <0x3c>;
-		clocks = <&clks 53>;
+		clocks = <&clks 200>;
 		clock-names = "csi_mclk";
 		DOVDD-supply = <&reg_1p8v>;
 		AVDD-supply = <&reg_2p5v>;
@@ -410,8 +393,7 @@
 	pinctrl-0 = <&pinctrl_usdhc2_2>;
 	bus-width = <4>;
 	non-removable;
-	//vmmc-supply = <&wilink_wl_en>;  /* Need to define power */
-	ocr-limit = <0x80>;     /* 1.65v - 1.95v */
+/*	vmmc-supply = <&brcm_wl_bt_en>; */
 	power-off-card;
 	keep-power-in-suspend;
 	status = "okay";
