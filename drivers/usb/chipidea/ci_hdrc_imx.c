@@ -71,6 +71,7 @@ struct ci_hdrc_imx_data {
 	struct usb_phy *phy;
 	struct platform_device *ci_pdev;
 	struct clk *clk;
+	struct clk *clk_phy;
 	struct imx_usbmisc_data *usbmisc_data;
 	bool supports_runtime_pm;
 	bool in_lpm;
@@ -195,10 +196,22 @@ static int ci_hdrc_imx_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	data->clk_phy = devm_clk_get(&pdev->dev, "phy");
+	if (IS_ERR(data->clk_phy)) {
+		data->clk_phy = NULL;
+	} else {
+		ret = clk_prepare_enable(data->clk_phy);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Failed to enable clk_phy: %d\n", ret);
+			goto err_clk;
+		}
+	}
+
 	data->phy = devm_usb_get_phy_by_phandle(&pdev->dev, "fsl,usbphy", 0);
 	if (IS_ERR(data->phy)) {
 		ret = PTR_ERR(data->phy);
-		goto err_clk;
+		goto err_clk_phy;
 	}
 
 	pdata.phy = data->phy;
@@ -289,6 +302,9 @@ static int ci_hdrc_imx_probe(struct platform_device *pdev)
 
 disable_device:
 	ci_hdrc_remove_device(data->ci_pdev);
+err_clk_phy:
+	if (data->clk_phy)
+		clk_disable_unprepare(data->clk_phy);
 remove_charger:
 	if (data->imx6_usb_charger_detection)
 		imx6_usb_remove_charger(&data->charger);
@@ -303,6 +319,8 @@ static int ci_hdrc_imx_remove(struct platform_device *pdev)
 	struct ci_hdrc_imx_data *data = platform_get_drvdata(pdev);
 
 	ci_hdrc_remove_device(data->ci_pdev);
+	if (data->clk_phy)
+		clk_disable_unprepare(data->clk_phy);
 	if (data->supports_runtime_pm) {
 		pm_runtime_get_sync(&pdev->dev);
 		pm_runtime_disable(&pdev->dev);
