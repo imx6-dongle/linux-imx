@@ -62,6 +62,13 @@
 		compatible = "fsl,mxc_v4l2_output";
 		status = "okay";
 	};
+
+	poweroff {
+		compatible = "udoo,poweroff";
+		sam3x_rst_gpio = <&gpio1 0 0>;
+		pwr_5v_gpio = <&gpio2 4 0>;
+	};
+
 };
 
 &hdmi_audio {

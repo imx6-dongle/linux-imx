@@ -37,3 +37,10 @@ config POWER_RESET_VEXPRESS
 	help
 	  Power off and reset support for the ARM Ltd. Versatile
 	  Express boards.
+
+config POWER_RESET_UDOO
+	bool "UDOO power-off driver"
+	depends on POWER_RESET
+	help
+	  This driver supports powering down the UDOO.
+	  Say Y if you have a UDOO.

@@ -243,6 +243,7 @@ static irqreturn_t snvs_rtc_irq_handler(int irq, void *dev_id)
 	return events ? IRQ_HANDLED : IRQ_NONE;
 }
 
+#ifndef CONFIG_POWER_RESET_UDOO
 static void snvs_poweroff(void)
 {
 	u32 value;
@@ -251,6 +252,7 @@ static void snvs_poweroff(void)
 	/* set TOP and DP_EN bit */
 	writel(value | 0x60, snvs_base + SNVS_LPCR);
 }
+#endif
 
 static int snvs_rtc_probe(struct platform_device *pdev)
 {
@@ -307,8 +309,10 @@ static int snvs_rtc_probe(struct platform_device *pdev)
 	 * if no specific power off function in board file, power off system by
 	 * SNVS
 	 */
+#ifndef CONFIG_POWER_RESET_UDOO
 	if (!pm_power_off)
 		pm_power_off = snvs_poweroff;
+#endif
 
 	return 0;
 }
