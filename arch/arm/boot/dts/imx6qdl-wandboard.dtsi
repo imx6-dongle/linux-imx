@@ -25,7 +25,6 @@
 		reg = <0x10000000 0x40000000>;
 	};
 
-
 	regulators {
 		compatible = "simple-bus";
 
@@ -52,34 +51,34 @@
 			regulator-max-microvolt = <3300000>;
 			regulator-always-on;
 		};
-#if 0
+
 		reg_usb_otg_vbus: usb_otg_vbus {
 			compatible = "regulator-fixed";
 			regulator-name = "usb_otg_vbus";
 			regulator-min-microvolt = <5000000>;
 			regulator-max-microvolt = <5000000>;
-			gpio = <&gpio3 22 0>;
+			gpio = <&gpio1 1 GPIO_ACTIVE_LOW>;
 			enable-active-high;
+		};
+
+#if 0
+		reg_brcm_wl_bt: brcm_wl_bt_en {
+			compatible = "regulator-fixed";
+			regulator-name = "brcm_wl_bt_en";
+			regulator-min-microvolt = <3300000>;
+			regulator-max-microvolt = <3300000>;
+			gpio = <&gpio2 29 GPIO_ACTIVE_HIGH>;
+			enable-active-high;
+			regulator-always-on;
 		};
 #endif
 
-		brcm_wl_bt_en: brcm_wlan {
-			compatible = "regulator-fixed";
-			regulator-name = "brcm_wl_bt_en";
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1800000>;
-			gpio = <&gpio1 26 0>;
-			startup-delay-us = <70000>;
-			enable-active-high;
-		};
 	};
 
-
-#if 0
-
 	sound {
-		compatible = "fsl,imx-audio-sgtl5000";
-		model = "imx6q-nitrogen6x-sgtl5000";
+		compatible = "fsl,imx6-wandboard-sgtl5000", 
+                             "fsl,imx-audio-sgtl5000";
+		model = "imx6-wandboard-sgtl5000";
 		ssi-controller = <&ssi1>;
 		audio-codec = <&codec>;
 		audio-routing =
@@ -89,13 +88,36 @@
 		mux-int-port = <1>;
 		mux-ext-port = <3>;
 	};
+
+        sound-spdif {
+                compatible = "fsl,imx-audio-spdif";
+                model = "imx-spdif";
+                spdif-controller = <&spdif>;
+                spdif-out;
+        };
+
 	sound-hdmi {
 		compatible = "fsl,imx6q-audio-hdmi",
 			     "fsl,imx-audio-hdmi";
 		model = "imx-audio-hdmi";
 		hdmi-controller = <&hdmi_audio>;
 	};
-#endif
+
+        rfkill {
+                compatible = "wand,imx6qdl-wandboard-rfkill";
+                pinctrl-names = "default";
+                pinctrl-0 = <>;
+
+                bluetooth-on = <&gpio3 13 0>;
+                bluetooth-wake = <&gpio3 14 0>;
+                bluetooth-host-wake = <&gpio3 15 0>;
+
+                wifi-ref-on = <&gpio2 29 0>;
+                wifi-rst-n = <&gpio5 2 0>;
+                wifi-reg-on = <&gpio1 26 0>;
+                wifi-host-wake = <&gpio1 29 0>;
+                wifi-wake = <&gpio1 30 0>;
+        };
 
 	mxcfb1: fb@0 {
 		compatible = "fsl,mxc_sdc_fb";
@@ -107,7 +129,6 @@
 		late_init = <0>;
 		status = "disabled";
 	};
-
 #if 0
 	mxcfb2: fb@1 {
 		compatible = "fsl,mxc_sdc_fb";
@@ -119,6 +140,7 @@
 		late_init = <0>;
 		status = "disabled";
 	};
+
 
 	mxcfb3: fb@2 {
 		compatible = "fsl,mxc_sdc_fb";
@@ -181,6 +203,18 @@
 		compatible = "fsl,mxc_v4l2_output";
 		status = "okay";
 	};
+
+#if 0
+/*
+ *  GPIO reset to reset the BCM4329
+ */
+	brcm_wlan_reset: gpio-reset {
+		compatible = "gpio-reset";
+		reset-gpios = <&gpio5 2 GPIO_ACTIVE_LOW>;
+		reset-delay-us = <11000>;
+		#reset-cells = <0>;
+	};
+#endif
 };
 
 
@@ -190,27 +224,12 @@
 	status = "okay";
 };
 
-#if 0
-&wlan {
-	compatible = "brcm, brcmfmac";
-	interrupt-parent = <&gpio6>;
-	interrupts = <14 IRQ_TYPE_LEVEL_HIGH>;
-	clocks = <&refclock>;
-	clock-names = "refclock";
-
-	refclock: refclock {
-		compatible = "brcm,brcm-clock";
-		#clock-cells = <0>;
-		clock-frequency = <38400000>;
-	};
-	status = "disabled";
-};
-#endif
 
 &fec {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_enet_3>;
 	phy-mode = "rgmii";
+        //phy-reset-gpios = <&gpio3 29 0>;
 	status = "okay";
 };
 
@@ -218,11 +237,13 @@
 	status = "okay";
 };
 
+#if 0
 &hdmi_cec {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hdmi_cec_2>;
 	status = "okay";
 };
+#endif
 
 &hdmi_core {
 	ipu_id = <0>;
@@ -237,7 +258,7 @@
 };
 
 &i2c1 {
-	clock-frequency = <400000>;
+	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c1_1>;
 	status = "okay";
@@ -250,7 +271,7 @@
 };
 
 &i2c2 {
-	clock-frequency = <400000>;
+	clock-frequency = <100000>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c2_2>;
 	status = "okay";
@@ -270,41 +291,132 @@
 		mclk = <24000000>;
 		mclk_source = <0>;
 	};
+
+	codec: sgtl5000@0a {
+		compatible = "fsl,sgtl5000";
+		reg = <0x0a>;
+		clocks = <&clks 201>;
+		VDDA-supply = <&reg_2p5v>;
+		VDDIO-supply = <&reg_3p3v>;
+	};
 };
 
 &i2c3 {
-        clock-frequency = <400000>;
+        clock-frequency = <100000>;
         pinctrl-names = "default";
         pinctrl-0 = <&pinctrl_i2c3_3>;
         status = "okay";
 };
 
+/*
+For reference here, the PAD_CTL bitfield definition from
+Documentation/devicetree/bindings/pinctrl/fsl,imx6q-pinctrl.txt
+
+CONFIG bits definition:
+PAD_CTL_HYS                     (1 << 16)
+PAD_CTL_PUS_100K_DOWN           (0 << 14)
+PAD_CTL_PUS_47K_UP              (1 << 14)
+PAD_CTL_PUS_100K_UP             (2 << 14)
+PAD_CTL_PUS_22K_UP              (3 << 14)
+PAD_CTL_PUE                     (1 << 13)
+PAD_CTL_PKE                     (1 << 12)
+PAD_CTL_ODE                     (1 << 11)
+PAD_CTL_SPEED_LOW               (1 << 6)
+PAD_CTL_SPEED_MED               (2 << 6)
+PAD_CTL_SPEED_HIGH              (3 << 6)
+PAD_CTL_DSE_DISABLE             (0 << 3)
+PAD_CTL_DSE_240ohm              (1 << 3)
+PAD_CTL_DSE_120ohm              (2 << 3)
+PAD_CTL_DSE_80ohm               (3 << 3)
+PAD_CTL_DSE_60ohm               (4 << 3)
+PAD_CTL_DSE_48ohm               (5 << 3)
+PAD_CTL_DSE_40ohm               (6 << 3)
+PAD_CTL_DSE_34ohm               (7 << 3)
+PAD_CTL_SRE_FAST                (1 << 0)
+PAD_CTL_SRE_SLOW                (0 << 0)
+
+Example, the Control Pad Setting
+
+    0x0f0b0
+
+corresponds to:
+
+   0b1111000010110000
+
+which is:
+
+   PAD_CTL_PUS_22K_UP | PAD_CTL_PUE | PAD_CTL_PKE |
+   PAD_CTL_SPEED_MED | PAD_CTL_DSE_40ohm
+
+For more information about this, refer to the IOMUXC section of the i.MX6
+reference manual.
+
+*/
+
+/*
+	TODO:
+
+See this error.  Not sure if it is USB OTG or not.
+imx_usb 2184000.usb: usbmisc init failed, ret=-517
+platform 2184000.usb: Driver imx_usb requests probe deferral
+imx_usb 2184200.usb: usbmisc init failed, ret=-517
+platform 2184200.usb: Driver imx_usb requests probe deferral
+
+See another issue with SGTL5000 perhaps:
+sgtl5000 1-000a: Failed to get supply 'VDDD': -19
+1-000a: 1200 mV normal
+sgtl5000 1-000a: Using internal LDO instead of VDDD
+sgtl5000 1-000a: sgtl5000 revision 0x11
+imx-sgtl5000 sound.22:  sgtl5000 <-> 2028000.ssi mapping ok
+
+*/
+
 &iomuxc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_hog_1>;
 
-	hog {
+	imx6qdl-wandboard {
 		pinctrl_hog_1: hoggrp-1 {
 			fsl,pins = <
-				MX6QDL_PAD_EIM_D22__GPIO3_IO22		0x80000000	/* otg power en */
+				MX6QDL_PAD_GPIO_0__CCM_CLKO1     	0x130b0
+				MX6QDL_PAD_EIM_D22__GPIO3_IO22		0x80000000	/* USB Power Enable */
 				MX6QDL_PAD_GPIO_2__GPIO1_IO02		0x80000000	/* USDHC1 CD */
 				MX6QDL_PAD_EIM_DA9__GPIO3_IO09		0x80000000	/* uSDHC3 CD */
 				MX6QDL_PAD_GPIO_0__CCM_CLKO1		0x000b0		/* SGTL5000 sys_mclk */
 				MX6QDL_PAD_GPIO_6__GPIO1_IO06		0x0b0b0		/* ov5640 mipi powerdown */
 				MX6QDL_PAD_KEY_COL4__GPIO4_IO14		0x000b0		/* ov5640 mipi reset */
 				MX6QDL_PAD_GPIO_3__CCM_CLKO2		0x000b0		/* ov5640 mclk */
-				MX6QDL_PAD_EIM_A25__GPIO5_IO02		0x0b0b0		/* Wifi reset (active low) */
-				MX6QDL_PAD_ENET_RXD1__GPIO1_IO26	0x000b0		/* Wifi power enable */
-				MX6QDL_PAD_ENET_TXD1__GPIO1_IO29	0x80000000	/* Wifi host wake */
-				MX6QDL_PAD_EIM_EB1__GPIO2_IO29		0x000b0		/* Wifi 32kHz slow clock */
-				MX6QDL_PAD_EIM_DA11__GPIO3_IO11 	0x80000000  	/* GPIO EDM p256 */
-				MX6QDL_PAD_EIM_D27__GPIO3_IO27 		0x80000000 	/* GPIO EDM p258 */
-				MX6QDL_PAD_EIM_BCLK__GPIO6_IO31		0x80000000	/* GPIO EDM p260 */
-				MX6QDL_PAD_ENET_RX_ER__GPIO1_IO24	0x80000000	/* GPIO EDM p262 */
-				MX6QDL_PAD_SD3_RST__GPIO7_IO08 		0x80000000	/* GPIO EDM p264 */
-				MX6QDL_PAD_EIM_D26__GPIO3_IO26 		0x80000000	/* GPIO EDM p259 */
-				MX6QDL_PAD_EIM_DA8__GPIO3_IO08 		0x80000000	/* GPIO EDM p261 */
-				MX6QDL_PAD_GPIO_19__GPIO4_IO05 		0x80000000	/* GPIO EDM p263 */
+				MX6QDL_PAD_EIM_A25__GPIO5_IO02		0x0f0b0		/* WIFI_ON (reset, active low) */
+				MX6QDL_PAD_ENET_RXD1__GPIO1_IO26	0x000b0		/* WL_REG_ON (unused) */
+				MX6QDL_PAD_ENET_TXD1__GPIO1_IO29	0x80000000	/* WL_HOST_WAKE, input */
+				MX6QDL_PAD_EIM_EB1__GPIO2_IO29		0x0f0b0		/* EIM_EB1 (Wifi Power Enable) */
+				MX6QDL_PAD_ENET_TXD0__GPIO1_IO30	0x80000000	/* WL_WAKE (unused) */
+                                MX6QDL_PAD_EIM_D29__GPIO3_IO29   	0x80000000
+                                MX6QDL_PAD_EIM_DA13__GPIO3_IO13  	0x80000000 	/* BT_ON */
+                                MX6QDL_PAD_EIM_DA14__GPIO3_IO14  	0x80000000 	/* BT_WAKE */
+                                MX6QDL_PAD_EIM_DA15__GPIO3_IO15  	0x80000000 	/* BT_HOST_WAKE */
+			>;
+		};
+
+	        pinctrl_spdif_wand: spdifgrp {
+	                fsl,pins = <
+				MX6QDL_PAD_ENET_RXD0__SPDIF_OUT                 0x1b0b0
+			>;
+	        };
+	};
+	gpio {
+		pinctrl_gpio: gpiogrp {
+			fsl,pins = <
+                                MX6QDL_PAD_EIM_DA12__GPIO3_IO12   0x80000000 /* GPIO3_12 EDM pin 255 */
+                                MX6QDL_PAD_EIM_DA11__GPIO3_IO11   0x80000000 /* GPIO3_11 EDM pin 256 */
+                                MX6QDL_PAD_EIM_DA10__GPIO3_IO10   0x80000000 /* GPIO3_10 EDM pin 257 */
+                                MX6QDL_PAD_EIM_D27__GPIO3_IO27    0x80000000 /* GPIO3_27 EDM pin 258 */
+                                MX6QDL_PAD_EIM_D26__GPIO3_IO26    0x80000000 /* GPIO3_26 EDM pin 259 */
+                                MX6QDL_PAD_EIM_BCLK__GPIO6_IO31   0x80000000 /* GPIO6_31 EDM pin 260 */
+                                MX6QDL_PAD_EIM_DA8__GPIO3_IO08    0x80000000 /* GPIO3_8  EDM pin 261 */
+                                MX6QDL_PAD_ENET_RX_ER__GPIO1_IO24 0x80000000 /* GPIO1_24 EDM pin 262 */
+                                MX6QDL_PAD_GPIO_19__GPIO4_IO05    0x80000000 /* GPIO4_5  EDM pin 263 */
+                                MX6QDL_PAD_SD3_RST__GPIO7_IO08    0x80000000 /* GPIO7_8  EDM pin 264 */
 			>;
 		};
 	};
@@ -355,6 +467,11 @@
 };
 #endif
 
+&spdif {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_spdif_wand>;
+        status = "okay";
+};
 
 &ssi1 {
 	fsl,mode = "i2s-slave";
@@ -367,24 +484,32 @@
 	status = "okay";
 };
 
+&uart3 {
+        pinctrl-names = "default";
+        pinctrl-0 = <&pinctrl_uart3_1>;
+        fsl,uart-has-rtscts;
+        status = "okay";
+};
+
 &usbh1 {
 	status = "okay";
 };
 
-#if 0
 &usbotg {
 	vbus-supply = <&reg_usb_otg_vbus>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usbotg_1>;
 	disable-over-current;
+	dr_mode = "peripheral";
 	status = "okay";
 };
-#endif
 
 &usdhc1 {  /* Baseboard microSD slot */
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc1_1>;
 	bus-width = <4>;
+	vmmc-supply = <&reg_3p3v>;
+	cd-gpios = <&gpio1 2 0>;
 	status = "okay";
 };
 
@@ -392,16 +517,17 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc2_2>;
 	bus-width = <4>;
-	non-removable;
-/*	vmmc-supply = <&brcm_wl_bt_en>; */
-	power-off-card;
+	//non-removable;
+	vmmc-supply = <&reg_3p3v>;
 	keep-power-in-suspend;
 	status = "okay";
 };
 
-&usdhc3 {
+&usdhc3 { /* Module microSD slot */
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_usdhc3_2>;
+	vmmc-supply = <&reg_3p3v>;
+        cd-gpios = <&gpio3 9 0>;
 	status = "okay";
 };
 
