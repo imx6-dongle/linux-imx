@@ -60,19 +60,6 @@
 			gpio = <&gpio1 1 GPIO_ACTIVE_LOW>;
 			enable-active-high;
 		};
-
-#if 0
-		reg_brcm_wl_bt: brcm_wl_bt_en {
-			compatible = "regulator-fixed";
-			regulator-name = "brcm_wl_bt_en";
-			regulator-min-microvolt = <3300000>;
-			regulator-max-microvolt = <3300000>;
-			gpio = <&gpio2 29 GPIO_ACTIVE_HIGH>;
-			enable-active-high;
-			regulator-always-on;
-		};
-#endif
-
 	};
 
 	sound {
@@ -204,17 +191,6 @@
 		status = "okay";
 	};
 
-#if 0
-/*
- *  GPIO reset to reset the BCM4329
- */
-	brcm_wlan_reset: gpio-reset {
-		compatible = "gpio-reset";
-		reset-gpios = <&gpio5 2 GPIO_ACTIVE_LOW>;
-		reset-delay-us = <11000>;
-		#reset-cells = <0>;
-	};
-#endif
 };
 
 
@@ -229,21 +205,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_enet_3>;
 	phy-mode = "rgmii";
-        //phy-reset-gpios = <&gpio3 29 0>;
 	status = "okay";
 };
 
 &hdmi_audio {
 	status = "okay";
 };
-
-#if 0
-&hdmi_cec {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_hdmi_cec_2>;
-	status = "okay";
-};
-#endif
 
 &hdmi_core {
 	ipu_id = <0>;
@@ -350,24 +317,6 @@ which is:
 
 For more information about this, refer to the IOMUXC section of the i.MX6
 reference manual.
-
-*/
-
-/*
-	TODO:
-
-See this error.  Not sure if it is USB OTG or not.
-imx_usb 2184000.usb: usbmisc init failed, ret=-517
-platform 2184000.usb: Driver imx_usb requests probe deferral
-imx_usb 2184200.usb: usbmisc init failed, ret=-517
-platform 2184200.usb: Driver imx_usb requests probe deferral
-
-See another issue with SGTL5000 perhaps:
-sgtl5000 1-000a: Failed to get supply 'VDDD': -19
-1-000a: 1200 mV normal
-sgtl5000 1-000a: Using internal LDO instead of VDDD
-sgtl5000 1-000a: sgtl5000 revision 0x11
-imx-sgtl5000 sound.22:  sgtl5000 <-> 2028000.ssi mapping ok
 
 */
 
