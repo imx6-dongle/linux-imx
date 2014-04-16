@@ -255,9 +255,12 @@ int reduce_bus_freq(void)
 {
 	int ret = 0;
 	clk_prepare_enable(pll3);
+#ifdef CONFIG_SOC_IMX6SL
 	if (cpu_is_imx6sl())
 		enter_lpm_imx6sl();
-	else {
+	else
+#endif
+	{
 		if (cpu_is_imx6dl() && (clk_get_parent(axi_sel_clk)
 			!= periph_clk))
 			/* Set axi to periph_clk */
@@ -393,9 +396,12 @@ int set_high_bus_freq(int high_bus_freq)
 		return 0;
 
 	clk_prepare_enable(pll3);
+#ifdef CONFIG_SOC_IMX6SL
 	if (cpu_is_imx6sl())
 		exit_lpm_imx6sl();
-	else {
+	else
+#endif
+	{
 		if (high_bus_freq) {
 			update_ddr_freq(ddr_normal_rate);
 			/* Make sure periph clk's parent also got updated */
@@ -773,6 +779,7 @@ static int busfreq_probe(struct platform_device *pdev)
 		}
 	}
 
+#ifdef CONFIG_SOC_IMX6SL
 	if (cpu_is_imx6sl()) {
 		pll1_sys = devm_clk_get(&pdev->dev, "pll1_sys");
 		if (IS_ERR(pll1_sys)) {
@@ -842,6 +849,7 @@ static int busfreq_probe(struct platform_device *pdev)
 		}
 
 	}
+#endif
 
 	err = sysfs_create_file(&busfreq_dev->kobj, &dev_attr_enable.attr);
 	if (err) {
@@ -880,9 +888,11 @@ static int busfreq_probe(struct platform_device *pdev)
 	register_pm_notifier(&imx_bus_freq_pm_notifier);
 	register_reboot_notifier(&imx_busfreq_reboot_notifier);
 
+#ifdef CONFIG_SOC_IMX6SL
 	if (cpu_is_imx6sl())
 		err = init_mmdc_lpddr2_settings(pdev);
 	else
+#endif
 		err = init_mmdc_ddr3_settings(pdev);
 	if (err) {
 		dev_err(busfreq_dev, "Busfreq init of MMDC failed\n");
