@@ -34,6 +34,14 @@
 			regulator-max-microvolt = <3300000>;
 			regulator-always-on;
 		};
+
+		reg_usb_h1_vbus: usb_h1_vbus {
+			compatible = "regulator-fixed";
+			regulator-name = "usb_h1_vbus";
+			regulator-min-microvolt = <5000000>;
+			regulator-max-microvolt = <5000000>;
+			gpio = <&gpio2 0 0>;
+		};
 	};
 
 	gpio-keys {
@@ -151,6 +159,7 @@
 &usbh1 {
 	phy_type = "utmi";
 	dr_mode = "host";
+	vbus-supply = <&reg_usb_h1_vbus>;
 	disable-over-current;
 	status = "okay";
 };
